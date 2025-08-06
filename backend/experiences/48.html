@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <title>sedfsd</title>
+</head>
+<body>
+    <a-scene 
+      mindar-image="imageTargetSrc: /api/markers/48.mind;"
+      color-space="sRGB"
+      renderer="colorManagement: true, physicallyCorrectLights"
+      vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: false"
+    >
+        <a-assets>
+            <!-- Preload assets here -->
+        <img id="asset-obj_1750269048527_4sszz6znx" src="/uploads/1750269048127-my-image.jpg" crossorigin="anonymous" />
+        <audio id="asset-obj_1750269180629_j6w3h3tqj" src="/uploads/1750269180244-320-Ilzaam - Jewel Thief The Heist Begins 320 Kbps.mp3" preload="auto" loop crossorigin="anonymous"></audio>
+        </a-assets>
+
+        <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+        <a-entity mindar-image-target="targetIndex: 0">
+        <a-plane
+          src="#asset-obj_1750269048527_4sszz6znx"
+          position="0 1 0"
+          rotation="0 0 0"
+          scale="1 1 1"
+        ></a-plane>
+        <a-entity 
+          id="audio-entity-obj_1750269180629_j6w3h3tqj"
+          position="0 1 0.9" 
+          rotation="0 0 0" 
+          scale="1 1 1"
+          visible="false"
+          data-audio-id="asset-obj_1750269180629_j6w3h3tqj"
+        ></a-entity>
+        </a-entity>
+    </a-scene>
+</body>
+</html>

@@ -1,0 +1,33 @@
+.image-display {
+  margin: 15px 0;
+}
+
+.canvas-container {
+  max-width: 100%;
+  overflow-x: auto;
+  margin-bottom: 10px;
+}
+
+.canvas-container canvas {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  border: 1px solid #ddd;
+}
+
+.image-info {
+  display: flex;
+  gap: 20px;
+  font-size: 14px;
+  color: #666;
+}
+
+.image-info p {
+  margin: 0;
+}
+
+h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #555;
+}
