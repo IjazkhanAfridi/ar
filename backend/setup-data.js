@@ -25,7 +25,7 @@ async function setupDefaultData() {
     const existingAdmin = await db
       .select()
       .from(users)
-      .where((users) => users.email === 'admin@example.com')
+      .where((users) => users.email === 'admin@gmail.com')
       .limit(1);
 
     if (existingAdmin.length === 0) {
