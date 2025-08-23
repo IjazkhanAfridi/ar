@@ -10,7 +10,8 @@
     "db:push": "drizzle-kit push",
     "db:migrate": "drizzle-kit migrate",
     "db:reset": "node reset-db.js",
-    "db:setup": "node setup-data.js"
+  "db:setup": "node setup-data.js",
+  "exp:regen": "node regenerate-experiences.js"
   },
   "dependencies": {
     "express": "^4.21.2",

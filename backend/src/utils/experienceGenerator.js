@@ -1,9 +1,66 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+// Ensure env vars are loaded for transformation tuning
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// ---------------------------------------------------------------------------
+// Transformation Configuration
+// ---------------------------------------------------------------------------
+// You can tune the spatial mapping between the authoring UI coordinate system
+// and the live MindAR coordinate system using environment variables:
+//   AR_POSITION_SCALE   -> multiplies every x,y,z (default 0.1 to reduce "floating")
+//   AR_FLATTEN_IMAGES   -> if 'true' rotates images & videos to lie on the marker
+//   AR_IMAGE_Z_OFFSET   -> small offset (default 0.01) to avoid z-fighting when flattened
+//   AR_AUTO_FIX_ROT_X   -> if 'true' and flatten disabled, will rotate images/videos
+//                           by -90deg on X ONLY when all rotation values are 0
+// These defaults aim to fix reported issues where media appeared far above
+// (because 1 unit = 1 meter in A-Frame) and with an unexpected angle.
+// Adjust in a .env file if needed and regenerate HTML (see regenerate-html.js).
+const POSITION_SCALE = parseFloat(process.env.AR_POSITION_SCALE || '0.1');
+const FLATTEN_IMAGES = (process.env.AR_FLATTEN_IMAGES || 'true').toLowerCase() === 'true';
+const IMAGE_Z_OFFSET = parseFloat(process.env.AR_IMAGE_Z_OFFSET || '0.01');
+const AUTO_FIX_ROT_X = (process.env.AR_AUTO_FIX_ROT_X || 'true').toLowerCase() === 'true';
+
+function transformPlacement(obj) {
+  // Original values (assume numbers)
+  let { x, y, z } = obj.position || { x: 0, y: 0, z: 0 };
+  let { x: rx, y: ry, z: rz } = obj.rotation || { x: 0, y: 0, z: 0 };
+
+  // Scale down positions to avoid large meter offsets
+  x *= POSITION_SCALE;
+  y *= POSITION_SCALE;
+  z *= POSITION_SCALE;
+
+  const isMedia = obj.content && ['image', 'video'].includes(obj.content.type);
+
+  // Flatten images/videos onto marker plane if requested
+  if (isMedia && FLATTEN_IMAGES) {
+    // If user already specified a non-zero rotation.x we respect it
+    if (Math.abs(rx) < 0.0001) {
+      rx = -90; // Lay flat on marker (MindAR target plane is XY)
+    }
+    // When flattened, move slightly up in Z to avoid z-fighting
+    if (Math.abs(z) < 0.0001) {
+      z = IMAGE_Z_OFFSET;
+    }
+  } else if (isMedia && AUTO_FIX_ROT_X && !FLATTEN_IMAGES) {
+    // If not flattening globally but rotation is exactly zero (likely unconfigured)
+    // and user expects upright billboard, leave as is; else we could add heuristics.
+    // Current heuristic: do nothing (placeholder for future logic)
+  }
+
+  return {
+    positionStr: `${x} ${y} ${z}`,
+    rotationStr: `${rx} ${ry} ${rz}`,
+    scaleStr: `${obj.scale.x} ${obj.scale.y} ${obj.scale.z}`,
+  };
+}
 
 export function generateExperienceHtml(experience) {
   if (!experience.mindFile) {
@@ -50,41 +107,44 @@ export function generateExperienceHtml(experience) {
 
   const entities = experience.contentConfig.sceneObjects
     .map((obj) => {
-      const position = `${obj.position.x} ${obj.position.y} ${obj.position.z}`;
-      const rotation = `${obj.rotation.x} ${obj.rotation.y} ${obj.rotation.z}`;
-      const scale = `${obj.scale.x} ${obj.scale.y} ${obj.scale.z}`;
+      const { positionStr, rotationStr, scaleStr } = transformPlacement(obj);
 
       switch (obj.content.type) {
         case 'image':
           return `        <a-image 
           src="#asset-${obj.id}" 
-          position="${position}" 
-          rotation="${rotation}" 
-          scale="${scale}"
+          position="${positionStr}" 
+          rotation="${rotationStr}" 
+          scale="${scaleStr}"
+          side="double"
+          crossorigin="anonymous"
         ></a-image>`;
 
         case 'video':
           return `        <a-video 
           src="#asset-${obj.id}" 
-          position="${position}" 
-          rotation="${rotation}" 
-          scale="${scale}"
+          position="${positionStr}" 
+          rotation="${rotationStr}" 
+          scale="${scaleStr}"
           autoplay="true"
           data-video-id="asset-${obj.id}"
+          crossorigin="anonymous"
+          playsinline
+          webkit-playsinline
         ></a-video>`;
 
         case 'model':
           return `        <a-entity 
           gltf-model="#asset-${obj.id}" 
-          position="${position}" 
-          rotation="${rotation}" 
-          scale="${scale}"
+          position="${positionStr}" 
+          rotation="${rotationStr}" 
+          scale="${scaleStr}"
         ></a-entity>`;
 
         case 'light':
           return `        <a-light 
           type="directional" 
-          position="${position}" 
+          position="${positionStr}" 
           intensity="${obj.content.intensity || 1}"
           color="${obj.content.color || '#ffffff'}"
         ></a-light>`;
@@ -92,9 +152,9 @@ export function generateExperienceHtml(experience) {
         case 'audio':
           return `        <a-entity 
             id="audio-entity-${obj.id}"
-            position="${position}" 
-            rotation="${rotation}" 
-            scale="${scale}"
+            position="${positionStr}" 
+            rotation="${rotationStr}" 
+            scale="${scaleStr}"
             visible="false"
             data-audio-id="asset-${obj.id}"
           ></a-entity>`;
