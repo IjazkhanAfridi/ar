@@ -205,23 +205,46 @@ export function SceneEditor({
       renderer.domElement
     );
     
-    // Set initial properties
+    // Set initial properties for better visibility and functionality
     transformControls.setMode(transformMode);
-    transformControls.setSize(0.8);
+    transformControls.setSize(1.2); // Make controls larger for better visibility
     transformControls.setSpace('world');
     
+    // Ensure controls are always visible and interactive
+    transformControls.visible = true;
+    transformControls.enabled = true;
+    
+    // Handle dragging events
     transformControls.addEventListener('dragging-changed', (event) => {
       orbitControls.enabled = !event.value;
+      console.log('Transform controls dragging:', event.value);
     });
 
+    // Handle object transformation changes
     transformControls.addEventListener('objectChange', () => {
       if (selectedObject) {
+        console.log('Object transformed:', {
+          position: selectedObject.position,
+          rotation: selectedObject.rotation, 
+          scale: selectedObject.scale
+        });
         updateSceneConfigOptimized();
       }
     });
 
+    // Handle mouse hover for better UX
+    transformControls.addEventListener('mouseDown', () => {
+      console.log('Transform controls mouse down');
+    });
+
+    transformControls.addEventListener('mouseUp', () => {
+      console.log('Transform controls mouse up');
+    });
+
     transformControlsRef.current = transformControls;
     scene.add(transformControls);
+    
+    console.log('Transform controls initialized and added to scene');
 
     // Add static lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -240,6 +263,36 @@ export function SceneEditor({
     // Add grid
     const gridHelper = new THREE.GridHelper(10, 10);
     scene.add(gridHelper);
+    
+    // Add a test cube for testing transform controls (remove this in production)
+    const testGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const testMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x00ff00,
+      transparent: true,
+      opacity: 0.8
+    });
+    const testCube = new THREE.Mesh(testGeometry, testMaterial);
+    testCube.position.set(2, 1, 0);
+    testCube.castShadow = true;
+    testCube.receiveShadow = true;
+    testCube.userData = {
+      id: 'test-cube',
+      type: 'content',
+      contentType: 'test',
+      config: {
+        position: { x: 2, y: 1, z: 0 },
+        rotation: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+        content: { type: 'test' }
+      }
+    };
+    scene.add(testCube);
+    console.log('Test cube added for transform controls testing');
+    
+    // Add test cube to scene objects for sidebar display
+    setTimeout(() => {
+      setSceneObjects(prev => [...prev, testCube]);
+    }, 100);
 
     // Click handler
     const handleClick = (event) => {
@@ -276,12 +329,24 @@ export function SceneEditor({
         while (targetObject.parent && !targetObject.userData.type) {
           targetObject = targetObject.parent;
         }
+        console.log('Object selected:', targetObject.userData);
         setSelectedObject(targetObject);
-        transformControlsRef.current?.attach(targetObject);
-        transformControlsRef.current?.setMode(transformMode);
+        
+        // Attach transform controls to the selected object
+        if (transformControlsRef.current) {
+          transformControlsRef.current.attach(targetObject);
+          transformControlsRef.current.setMode(transformMode);
+          transformControlsRef.current.visible = true;
+          transformControlsRef.current.enabled = true;
+          console.log('Transform controls attached to object:', targetObject.userData.id, 'mode:', transformMode);
+        }
       } else {
+        console.log('No object selected, detaching controls');
         setSelectedObject(null);
-        transformControlsRef.current?.detach();
+        if (transformControlsRef.current) {
+          transformControlsRef.current.detach();
+          transformControlsRef.current.visible = false;
+        }
       }
     };
 
@@ -449,7 +514,10 @@ export function SceneEditor({
 
   useEffect(() => {
     if (transformControlsRef.current && selectedObject) {
+      console.log('Updating transform mode to:', transformMode);
       transformControlsRef.current.setMode(transformMode);
+      transformControlsRef.current.visible = true;
+      transformControlsRef.current.enabled = true;
     }
   }, [transformMode, selectedObject]);
 
@@ -548,23 +616,62 @@ export function SceneEditor({
     setLoadedObjectIds(currentIds);
   }, [sceneObjectsIds, isSceneInitialized]);
 
-  // Optimized config update function
+  // Optimized config update function with real-time feedback
   const updateSceneConfigOptimized = useCallback(() => {
     if (!selectedObject) return;
 
-    const updatedConfig = {
-      ...config,
-      sceneObjects: sceneObjects.map((obj) => ({
+    // Update the object's internal config
+    if (selectedObject.userData.config) {
+      selectedObject.userData.config.position = {
+        x: selectedObject.position.x,
+        y: selectedObject.position.y,
+        z: selectedObject.position.z
+      };
+      selectedObject.userData.config.rotation = {
+        x: selectedObject.rotation.x,
+        y: selectedObject.rotation.y,
+        z: selectedObject.rotation.z
+      };
+      selectedObject.userData.config.scale = {
+        x: selectedObject.scale.x,
+        y: selectedObject.scale.y,
+        z: selectedObject.scale.z
+      };
+    }
+
+    // Update the global config
+    const updatedSceneObjects = sceneObjects.map((obj) => {
+      if (obj.userData.id === selectedObject.userData.id) {
+        return {
+          id: obj.userData.id,
+          position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
+          rotation: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z },
+          scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z },
+          content: obj.userData.config?.content || obj.userData.config,
+        };
+      }
+      return {
         id: obj.userData.id,
         position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
         rotation: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z },
         scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z },
-        content: obj.userData.config.content,
-      })),
+        content: obj.userData.config?.content || obj.userData.config,
+      };
+    });
+
+    const updatedConfig = {
+      ...config,
+      sceneObjects: updatedSceneObjects,
     };
 
     onChange(updatedConfig);
     form.setValue('contentConfig', updatedConfig);
+    
+    console.log('Config updated for object:', selectedObject.userData.id, {
+      position: selectedObject.position,
+      rotation: selectedObject.rotation,
+      scale: selectedObject.scale
+    });
   }, [selectedObject, sceneObjects, config, onChange, form]);
 
   const recreateSceneObject = useCallback(async (sceneObjectConfig) => {
@@ -887,8 +994,15 @@ export function SceneEditor({
           });
 
           setSelectedObject(sceneObject);
-          transformControlsRef.current?.attach(sceneObject);
-          transformControlsRef.current?.setMode(transformMode);
+          
+          // Immediately attach transform controls to new object
+          if (transformControlsRef.current) {
+            transformControlsRef.current.attach(sceneObject);
+            transformControlsRef.current.setMode(transformMode);
+            transformControlsRef.current.visible = true;
+            transformControlsRef.current.enabled = true;
+            console.log('Transform controls auto-attached to new object:', sceneObject.userData.id);
+          }
 
           const updatedConfig = {
             ...config,
@@ -1343,7 +1457,13 @@ export function SceneEditor({
         {/* Current Mode Indicator */}
         {selectedObject && (
           <div className='absolute top-4 right-4 bg-blue-600/90 text-white px-4 py-2 rounded-lg font-semibold z-10'>
-            Mode: {transformMode.charAt(0).toUpperCase() + transformMode.slice(1)}
+            <div className='flex items-center gap-2'>
+              <div className='w-2 h-2 bg-green-400 rounded-full animate-pulse'></div>
+              <span>Selected: {selectedObject.userData.contentType}</span>
+            </div>
+            <div className='text-sm mt-1'>
+              Mode: {transformMode.charAt(0).toUpperCase() + transformMode.slice(1)}
+            </div>
           </div>
         )}
       </div>
@@ -1444,8 +1564,15 @@ export function SceneEditor({
                       : 'bg-slate-700 hover:bg-slate-600'
                   }`}
                   onClick={() => {
+                    console.log('Sidebar object clicked:', object.userData.id);
                     setSelectedObject(object);
-                    transformControlsRef.current?.attach(object);
+                    if (transformControlsRef.current) {
+                      transformControlsRef.current.attach(object);
+                      transformControlsRef.current.setMode(transformMode);
+                      transformControlsRef.current.visible = true;
+                      transformControlsRef.current.enabled = true;
+                      console.log('Transform controls attached from sidebar');
+                    }
                   }}
                 >
                   <div className='flex items-center gap-3'>
