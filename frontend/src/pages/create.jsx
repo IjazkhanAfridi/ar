@@ -196,6 +196,7 @@ export default function Create() {
             onMindFileUpload={handleMindFileUpload}
             onMarkerImageUpload={setMarkerImage}
             transformMode={transformMode}
+            onTransformModeChange={setTransformMode}
             uploadedMindFile={uploadedMindFile}
             form={form}
           />

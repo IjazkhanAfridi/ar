@@ -408,6 +408,7 @@ const MultipleImageCreate = () => {
             onMindFileUpload={handleMindFileUpload}
             onMarkerImageUpload={handleMarkerImageUpload}
             transformMode={transformMode}
+            onTransformModeChange={setTransformMode}
             uploadedMindFile={uploadedMindFile}
             form={form}
           />

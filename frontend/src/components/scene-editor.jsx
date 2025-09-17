@@ -98,6 +98,7 @@ export function SceneEditor({
   onMindFileUpload,
   onMarkerImageUpload,
   transformMode,
+  onTransformModeChange,
   uploadedMindFile,
   form,
 }) {
@@ -203,6 +204,12 @@ export function SceneEditor({
       camera,
       renderer.domElement
     );
+    
+    // Set initial properties
+    transformControls.setMode(transformMode);
+    transformControls.setSize(0.8);
+    transformControls.setSpace('world');
+    
     transformControls.addEventListener('dragging-changed', (event) => {
       orbitControls.enabled = !event.value;
     });
@@ -278,7 +285,73 @@ export function SceneEditor({
       }
     };
 
+    // Keyboard shortcuts handler
+    const handleKeyDown = (event) => {
+      if (!transformControlsRef.current) return;
+      
+      // Prevent default for our shortcuts
+      const key = event.key.toLowerCase();
+      
+      switch (key) {
+        case 'w':
+          event.preventDefault();
+          transformControlsRef.current.setMode('translate');
+          onTransformModeChange?.('translate');
+          break;
+        case 'e':
+          event.preventDefault();
+          transformControlsRef.current.setMode('rotate');
+          onTransformModeChange?.('rotate');
+          break;
+        case 'r':
+          event.preventDefault();
+          transformControlsRef.current.setMode('scale');
+          onTransformModeChange?.('scale');
+          break;
+        case 'q':
+          event.preventDefault();
+          transformControlsRef.current.setSpace(
+            transformControlsRef.current.space === 'local' ? 'world' : 'local'
+          );
+          break;
+        case 'x':
+          event.preventDefault();
+          transformControlsRef.current.showX = !transformControlsRef.current.showX;
+          break;
+        case 'y':
+          event.preventDefault();
+          transformControlsRef.current.showY = !transformControlsRef.current.showY;
+          break;
+        case 'z':
+          event.preventDefault();
+          transformControlsRef.current.showZ = !transformControlsRef.current.showZ;
+          break;
+        case ' ':
+          event.preventDefault();
+          transformControlsRef.current.enabled = !transformControlsRef.current.enabled;
+          break;
+        case 'escape':
+          event.preventDefault();
+          if (selectedObject) {
+            setSelectedObject(null);
+            transformControlsRef.current.detach();
+          }
+          break;
+        case '+':
+        case '=':
+          event.preventDefault();
+          transformControlsRef.current.setSize(transformControlsRef.current.size + 0.1);
+          break;
+        case '-':
+        case '_':
+          event.preventDefault();
+          transformControlsRef.current.setSize(Math.max(0.1, transformControlsRef.current.size - 0.1));
+          break;
+      }
+    };
+
     containerRef.current.addEventListener('click', handleClick);
+    document.addEventListener('keydown', handleKeyDown);
 
     // Animation loop
     const animate = () => {
@@ -347,6 +420,7 @@ export function SceneEditor({
 
       window.removeEventListener('resize', handleResize);
       containerRef.current?.removeEventListener('click', handleClick);
+      document.removeEventListener('keydown', handleKeyDown);
 
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
@@ -1230,7 +1304,7 @@ export function SceneEditor({
       </div>
 
       {/* Center - 3D Scene Viewer */}
-      <div className='flex-1 bg-slate-800 h-full'>
+      <div className='flex-1 bg-slate-800 h-full relative'>
         <div
           ref={containerRef}
           className='w-full h-full bg-slate-800 relative'
@@ -1240,6 +1314,38 @@ export function SceneEditor({
             minHeight: '500px',
           }}
         />
+        
+        {/* Keyboard Shortcuts Help Panel */}
+        <div className='absolute top-4 left-4 bg-black/80 text-white p-4 rounded-lg text-sm font-mono z-10'>
+          <div className='mb-2 font-bold text-blue-400'>Transform Controls:</div>
+          <div className='space-y-1'>
+            <div className={`${transformMode === 'translate' ? 'text-green-400' : 'text-gray-300'}`}>
+              <span className='text-yellow-400'>W</span> - Translate (Move)
+            </div>
+            <div className={`${transformMode === 'rotate' ? 'text-green-400' : 'text-gray-300'}`}>
+              <span className='text-yellow-400'>E</span> - Rotate
+            </div>
+            <div className={`${transformMode === 'scale' ? 'text-green-400' : 'text-gray-300'}`}>
+              <span className='text-yellow-400'>R</span> - Scale
+            </div>
+          </div>
+          <div className='mt-3 pt-2 border-t border-gray-600'>
+            <div className='space-y-1 text-xs'>
+              <div><span className='text-yellow-400'>Q</span> - Toggle World/Local</div>
+              <div><span className='text-yellow-400'>X/Y/Z</span> - Toggle Axis</div>
+              <div><span className='text-yellow-400'>Space</span> - Toggle Controls</div>
+              <div><span className='text-yellow-400'>Esc</span> - Deselect</div>
+              <div><span className='text-yellow-400'>+/-</span> - Resize Controls</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Current Mode Indicator */}
+        {selectedObject && (
+          <div className='absolute top-4 right-4 bg-blue-600/90 text-white px-4 py-2 rounded-lg font-semibold z-10'>
+            Mode: {transformMode.charAt(0).toUpperCase() + transformMode.slice(1)}
+          </div>
+        )}
       </div>
 
       {/* Right Sidebar - Transform Controls */}
@@ -1250,14 +1356,18 @@ export function SceneEditor({
             <div className='grid grid-cols-2 gap-2 mb-4'>
               <Button
                 variant={
-                  activeControlPanel === 'position' ? 'default' : 'outline'
+                  transformMode === 'translate' ? 'default' : 'outline'
                 }
                 size='sm'
-                onClick={() =>
+                onClick={() => {
+                  onTransformModeChange?.('translate');
+                  if (transformControlsRef.current) {
+                    transformControlsRef.current.setMode('translate');
+                  }
                   setActiveControlPanel((prev) =>
                     prev === 'position' ? null : 'position'
-                  )
-                }
+                  );
+                }}
                 className='flex items-center gap-2'
               >
                 <Move className='h-4 w-4' />
@@ -1265,27 +1375,35 @@ export function SceneEditor({
               </Button>
               <Button
                 variant={
-                  activeControlPanel === 'rotation' ? 'default' : 'outline'
+                  transformMode === 'rotate' ? 'default' : 'outline'
                 }
                 size='sm'
-                onClick={() =>
+                onClick={() => {
+                  onTransformModeChange?.('rotate');
+                  if (transformControlsRef.current) {
+                    transformControlsRef.current.setMode('rotate');
+                  }
                   setActiveControlPanel((prev) =>
                     prev === 'rotation' ? null : 'rotation'
-                  )
-                }
+                  );
+                }}
                 className='flex items-center gap-2'
               >
                 <RotateCw className='h-4 w-4' />
                 <span className='text-xs'>Rotate</span>
               </Button>
               <Button
-                variant={activeControlPanel === 'scale' ? 'default' : 'outline'}
+                variant={transformMode === 'scale' ? 'default' : 'outline'}
                 size='sm'
-                onClick={() =>
+                onClick={() => {
+                  onTransformModeChange?.('scale');
+                  if (transformControlsRef.current) {
+                    transformControlsRef.current.setMode('scale');
+                  }
                   setActiveControlPanel((prev) =>
                     prev === 'scale' ? null : 'scale'
-                  )
-                }
+                  );
+                }}
                 className='flex items-center gap-2'
               >
                 <Maximize className='h-4 w-4' />
