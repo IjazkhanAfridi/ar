@@ -206,13 +206,22 @@ export function SceneEditor({
     );
     
     // Set initial properties for better visibility and functionality
-    transformControls.setMode(transformMode);
-    transformControls.setSize(1.2); // Make controls larger for better visibility
+    transformControls.setMode('translate'); // Start with translate mode
+    transformControls.setSize(1.5); // Make controls larger for better visibility
     transformControls.setSpace('world');
     
-    // Ensure controls are always visible and interactive
-    transformControls.visible = true;
+    // Ensure controls are visible and interactive
+    transformControls.visible = false; // Start hidden, show when object selected
     transformControls.enabled = true;
+    
+    // Force material update
+    transformControls.traverse((child) => {
+      if (child.material) {
+        child.material.depthTest = false;
+        child.material.depthWrite = false;
+        child.renderOrder = 999;
+      }
+    });
     
     // Handle dragging events
     transformControls.addEventListener('dragging-changed', (event) => {
@@ -279,6 +288,8 @@ export function SceneEditor({
       id: 'test-cube',
       type: 'content',
       contentType: 'test',
+      selectable: true,
+      name: 'Test Cube',
       config: {
         position: { x: 2, y: 1, z: 0 },
         rotation: { x: 0, y: 0, z: 0 },
@@ -309,39 +320,74 @@ export function SceneEditor({
         true
       );
 
-      const clickedObject = intersects.find(({ object }) => {
-        if (
-          object instanceof THREE.GridHelper ||
-          object.parent instanceof TransformControls
-        ) {
-          return false;
-        }
+      console.log('Intersects found:', intersects.length);
+      
+      // Filter out non-selectable objects
+      const validIntersects = intersects.filter(({ object }) => {
+        // Skip grid helper
+        if (object instanceof THREE.GridHelper) return false;
+        
+        // Skip transform controls
+        if (object.parent && object.parent.type === 'TransformControls') return false;
+        
+        // Check if object or its parent has selectable userData
         let current = object;
         while (current) {
-          if (current.userData.type === 'content') return true;
+          if (current.userData.type === 'content' || current.userData.selectable) {
+            return true;
+          }
           current = current.parent;
         }
         return false;
-      })?.object;
+      });
 
-      if (clickedObject) {
-        let targetObject = clickedObject;
-        while (targetObject.parent && !targetObject.userData.type) {
+      console.log('Valid intersects:', validIntersects.length);
+
+      if (validIntersects.length > 0) {
+        let targetObject = validIntersects[0].object;
+        
+        // Find the root selectable object
+        while (targetObject.parent && !targetObject.userData.type && !targetObject.userData.selectable) {
           targetObject = targetObject.parent;
         }
-        console.log('Object selected:', targetObject.userData);
+        
+        console.log('🎯 Object selected:', targetObject.userData);
         setSelectedObject(targetObject);
+        
+        // Add visual selection indicator
+        if (targetObject.material) {
+          // Store original emissive color
+          if (!targetObject.userData.originalEmissive) {
+            targetObject.userData.originalEmissive = targetObject.material.emissive.getHex();
+          }
+          // Set selection highlight
+          targetObject.material.emissive.setHex(0x444444);
+        }
         
         // Attach transform controls to the selected object
         if (transformControlsRef.current) {
+          console.log('📎 Attaching transform controls...');
           transformControlsRef.current.attach(targetObject);
-          transformControlsRef.current.setMode(transformMode);
+          transformControlsRef.current.setMode(transformMode || 'translate');
           transformControlsRef.current.visible = true;
           transformControlsRef.current.enabled = true;
-          console.log('Transform controls attached to object:', targetObject.userData.id, 'mode:', transformMode);
+          
+          // Force update transform controls
+          transformControlsRef.current.updateMatrixWorld(true);
+          
+          console.log('✅ Transform controls attached to:', targetObject.userData.id || targetObject.userData.name, 'mode:', transformMode);
+          console.log('Transform controls object:', transformControlsRef.current.object === targetObject);
+          console.log('Transform controls visible:', transformControlsRef.current.visible);
+          console.log('Transform controls enabled:', transformControlsRef.current.enabled);
         }
       } else {
-        console.log('No object selected, detaching controls');
+        console.log('🚫 No valid object selected, detaching controls');
+        
+        // Remove selection highlight from previously selected object
+        if (selectedObject && selectedObject.material && selectedObject.userData.originalEmissive !== undefined) {
+          selectedObject.material.emissive.setHex(selectedObject.userData.originalEmissive);
+        }
+        
         setSelectedObject(null);
         if (transformControlsRef.current) {
           transformControlsRef.current.detach();
@@ -418,10 +464,16 @@ export function SceneEditor({
     containerRef.current.addEventListener('click', handleClick);
     document.addEventListener('keydown', handleKeyDown);
 
-    // Animation loop
+    // Animation loop with transform controls update
     const animate = () => {
       animationFrameRef.current = requestAnimationFrame(animate);
       orbitControls.update();
+      
+      // Ensure transform controls are rendered
+      if (transformControlsRef.current) {
+        transformControlsRef.current.updateMatrixWorld();
+      }
+      
       renderer.render(scene, camera);
     };
     animate();
