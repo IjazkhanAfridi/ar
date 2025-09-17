@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Move, RotateCw, Maximize, Sun } from 'lucide-react';
+import { Move, RotateCw, Maximize, Sun, Keyboard, ChevronDown, ChevronUp } from 'lucide-react';
 import { ObjectsList } from './ObjectsList';
 import { PositionPanel, RotationPanel, ScalePanel, LightPanel } from './TransformPanels';
 
@@ -15,6 +15,7 @@ export function SidebarRight({
   onTransformSync
 }) {
   const isLight = selectedObject?.userData.contentType === 'light';
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   return (
     <div className='w-64 bg-slate-800 border-l border-slate-700 h-full flex flex-col'>
       <Card className='h-full bg-slate-800 border-0 rounded-none flex flex-col'>
@@ -25,6 +26,31 @@ export function SidebarRight({
             <ModeButton icon={<Maximize className='h-4 w-4' />} label='Scale' id='scale' activePanel={activePanel} setActivePanel={setActivePanel} />
             {isLight && (
               <ModeButton icon={<Sun className='h-4 w-4' />} label='Light' id='intensity' activePanel={activePanel} setActivePanel={setActivePanel} />
+            )}
+          </div>
+          
+          {/* Keyboard Shortcuts Help */}
+          <div className='border border-slate-600 rounded-lg'>
+            <Button
+              variant='ghost'
+              size='sm'
+              onClick={() => setShowKeyboardHelp(!showKeyboardHelp)}
+              className='w-full justify-between text-slate-300 hover:text-white hover:bg-slate-700'
+            >
+              <div className='flex items-center gap-2'>
+                <Keyboard className='h-4 w-4' />
+                <span className='text-xs'>Keyboard Shortcuts</span>
+              </div>
+              {showKeyboardHelp ? <ChevronUp className='h-4 w-4' /> : <ChevronDown className='h-4 w-4' />}
+            </Button>
+            
+            {showKeyboardHelp && (
+              <div className='px-3 pb-3 text-xs text-slate-300 space-y-1 font-mono'>
+                <div><span className='text-yellow-400'>W</span> translate | <span className='text-yellow-400'>E</span> rotate | <span className='text-yellow-400'>R</span> scale</div>
+                <div><span className='text-yellow-400'>Q</span> toggle world/local space</div>
+                <div><span className='text-yellow-400'>X/Y/Z</span> toggle axis | <span className='text-yellow-400'>+/-</span> adjust size</div>
+                <div><span className='text-yellow-400'>Space</span> toggle enabled | <span className='text-yellow-400'>Esc</span> deselect</div>
+              </div>
             )}
           </div>
         </div>

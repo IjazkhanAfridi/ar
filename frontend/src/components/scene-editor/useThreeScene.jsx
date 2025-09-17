@@ -15,12 +15,78 @@ export function useThreeScene(transformMode, onObjectTransform) {
   const mouseRef = useRef(new THREE.Vector2());
   const [initialized, setInitialized] = useState(false);
   const [selectedObject, setSelectedObject] = useState(null);
+  const [currentTransformMode, setCurrentTransformMode] = useState(transformMode);
 
   // Stable ref for external transform callback
   const objectTransformRef = useRef(onObjectTransform);
   useEffect(() => {
     objectTransformRef.current = onObjectTransform;
   }, [onObjectTransform]);
+
+  // Keyboard shortcut handler
+  const handleKeyDown = useCallback((event) => {
+    if (!transformControlsRef.current) return;
+    
+    const key = event.key.toLowerCase();
+    
+    // Handle shortcuts that don't require a selected object
+    switch (key) {
+      case 'escape':
+        if (selectedObject) {
+          event.preventDefault();
+          setSelectedObject(null);
+          transformControlsRef.current.detach();
+        }
+        return;
+    }
+    
+    // Handle shortcuts that require a selected object
+    if (!selectedObject) return;
+    
+    // Prevent default for our handled keys
+    if (['w', 'e', 'r', 'q', 'x', 'y', 'z', ' ', '+', '=', '-'].includes(key)) {
+      event.preventDefault();
+    }
+    
+    switch (key) {
+      case 'w':
+        setCurrentTransformMode('translate');
+        transformControlsRef.current.setMode('translate');
+        break;
+      case 'e':
+        setCurrentTransformMode('rotate');
+        transformControlsRef.current.setMode('rotate');
+        break;
+      case 'r':
+        setCurrentTransformMode('scale');
+        transformControlsRef.current.setMode('scale');
+        break;
+      case 'q':
+        transformControlsRef.current.setSpace(
+          transformControlsRef.current.space === 'local' ? 'world' : 'local'
+        );
+        break;
+      case 'x':
+        transformControlsRef.current.showX = !transformControlsRef.current.showX;
+        break;
+      case 'y':
+        transformControlsRef.current.showY = !transformControlsRef.current.showY;
+        break;
+      case 'z':
+        transformControlsRef.current.showZ = !transformControlsRef.current.showZ;
+        break;
+      case ' ':
+        transformControlsRef.current.enabled = !transformControlsRef.current.enabled;
+        break;
+      case '+':
+      case '=':
+        transformControlsRef.current.setSize(transformControlsRef.current.size * 1.1);
+        break;
+      case '-':
+        transformControlsRef.current.setSize(transformControlsRef.current.size * 0.9);
+        break;
+    }
+  }, [selectedObject]);
 
   useEffect(() => {
     if (!containerRef.current || initialized) return;
@@ -105,6 +171,7 @@ export function useThreeScene(transformMode, onObjectTransform) {
       }
     };
     containerRef.current.addEventListener('click', handleClick);
+    document.addEventListener('keydown', handleKeyDown);
 
     const animate = () => {
       animationRef.current = requestAnimationFrame(animate);
@@ -127,6 +194,7 @@ export function useThreeScene(transformMode, onObjectTransform) {
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      document.removeEventListener('keydown', handleKeyDown);
       containerRef.current?.removeEventListener('click', handleClick);
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
       transform.dispose?.();
@@ -139,7 +207,7 @@ export function useThreeScene(transformMode, onObjectTransform) {
       setInitialized(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialized]); // removed selectedObject / transformMode / callback to prevent re-inits
+  }, [initialized, handleKeyDown]); // added handleKeyDown dependency
 
   // Just update mode when transformMode changes
   useEffect(() => {
@@ -156,7 +224,8 @@ export function useThreeScene(transformMode, onObjectTransform) {
     transformControls: transformControlsRef,
     selectedObject,
     setSelectedObject,
-    initialized
+    initialized,
+    currentTransformMode
   };
 }
 
