@@ -23,6 +23,7 @@ import MultipleImageTracking from './pages/MultipleImageTracking';
 import MultipleImageConfirmation from './pages/MultipleImageConfirmation';
 import MultipleImageCreate from './pages/MultipleImageCreate';
 import DebugTransform from './pages/debug-transform';
+import SimpleTest from './pages/simple-test';
 
 export default function App() {
   return (
@@ -36,6 +37,7 @@ export default function App() {
               <Route path='/register' element={<Register />} />
               <Route path='/share/:link' element={<View />} />
               <Route path='/debug-transform' element={<DebugTransform />} />
+              <Route path='/simple-test' element={<SimpleTest />} />
 
               {/* User routes - restricted for admins */}
               <Route

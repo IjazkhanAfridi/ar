@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
@@ -11,6 +11,8 @@ export function TransformControlsDebug() {
   const transformControlsRef = useRef();
   const orbitControlsRef = useRef();
   const animationIdRef = useRef();
+  const [selectedObject, setSelectedObject] = useState(null);
+  const [transformMode, setTransformMode] = useState('translate');
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -98,12 +100,21 @@ export function TransformControlsDebug() {
     
     // Configure transform controls
     transformControls.setMode('translate');
-    transformControls.setSize(1.5);
+    transformControls.setSize(2.0); // Make them bigger
     transformControls.setSpace('world');
     
-    // Make sure they're visible and enabled
-    transformControls.visible = true;
+    // Initially hide controls
+    transformControls.visible = false;
     transformControls.enabled = true;
+    
+    // Ensure proper rendering order
+    transformControls.traverse((child) => {
+      if (child.material) {
+        child.material.depthTest = false;
+        child.material.transparent = true;
+        child.renderOrder = 999;
+      }
+    });
     
     console.log('TransformControls properties:', {
       mode: transformControls.mode,
@@ -154,27 +165,41 @@ export function TransformControlsDebug() {
       const intersects = raycaster.intersectObjects(selectableObjects, false);
 
       if (intersects.length > 0) {
-        const selectedObject = intersects[0].object;
-        console.log('🎯 Object selected:', selectedObject.userData.name);
+        const clickedObject = intersects[0].object;
+        console.log('🎯 Object selected:', clickedObject.userData.name);
+        setSelectedObject(clickedObject);
         
         // Attach transform controls
-        transformControls.attach(selectedObject);
+        console.log('📎 Attaching transform controls...');
+        transformControls.attach(clickedObject);
+        transformControls.setMode(transformMode);
         transformControls.visible = true;
+        transformControls.enabled = true;
         
-        console.log('✅ Transform controls attached to:', selectedObject.userData.name);
+        // Force update
+        transformControls.updateMatrixWorld(true);
+        
+        console.log('✅ Transform controls attached to:', clickedObject.userData.name);
+        console.log('Transform controls state:', {
+          attached: transformControls.object === clickedObject,
+          visible: transformControls.visible,
+          enabled: transformControls.enabled,
+          mode: transformControls.mode
+        });
         
         // Add visual indicator
-        selectedObject.material.emissive.setHex(0x444444);
+        clickedObject.material.emissive.setHex(0x444444);
         
         // Remove emissive from other objects
         selectableObjects.forEach(obj => {
-          if (obj !== selectedObject) {
+          if (obj !== clickedObject) {
             obj.material.emissive.setHex(0x000000);
           }
         });
         
       } else {
         console.log('🚫 No object selected, detaching controls');
+        setSelectedObject(null);
         transformControls.detach();
         transformControls.visible = false;
         
@@ -195,18 +220,23 @@ export function TransformControlsDebug() {
       switch (event.key.toLowerCase()) {
         case 'w':
           transformControls.setMode('translate');
+          setTransformMode('translate');
           console.log('🎮 Mode: Translate');
           break;
         case 'e':
           transformControls.setMode('rotate');
+          setTransformMode('rotate');
           console.log('🎮 Mode: Rotate');
           break;
         case 'r':
           transformControls.setMode('scale');
+          setTransformMode('scale');
           console.log('🎮 Mode: Scale');
           break;
         case 'escape':
           transformControls.detach();
+          transformControls.visible = false;
+          setSelectedObject(null);
           console.log('🚫 Deselected');
           break;
       }
@@ -256,23 +286,116 @@ export function TransformControlsDebug() {
         ref={containerRef}
         style={{ width: '100%', height: '100%' }}
       />
+      
+      {/* Instructions Panel */}
       <div
         style={{
           position: 'absolute',
           top: '10px',
           left: '10px',
-          background: 'rgba(0,0,0,0.8)',
+          background: 'rgba(0,0,0,0.9)',
           color: 'white',
-          padding: '10px',
-          borderRadius: '5px',
+          padding: '15px',
+          borderRadius: '8px',
           fontFamily: 'monospace',
-          fontSize: '12px'
+          fontSize: '12px',
+          maxWidth: '250px'
         }}
       >
-        <div><strong>Transform Controls Debug</strong></div>
-        <div>Click on objects to select them</div>
-        <div>W - Translate | E - Rotate | R - Scale</div>
-        <div>Check browser console for logs</div>
+        <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '10px' }}>
+          🎮 Transform Controls Debug
+        </div>
+        <div style={{ marginBottom: '8px' }}>
+          <strong>1. Click</strong> on red cube, green sphere, or blue cylinder
+        </div>
+        <div style={{ marginBottom: '8px' }}>
+          <strong>2. Use keys:</strong>
+        </div>
+        <div style={{ marginLeft: '10px', marginBottom: '5px' }}>
+          <span style={{ color: '#ffff00' }}>W</span> - Translate (Move)
+        </div>
+        <div style={{ marginLeft: '10px', marginBottom: '5px' }}>
+          <span style={{ color: '#ffff00' }}>E</span> - Rotate
+        </div>
+        <div style={{ marginLeft: '10px', marginBottom: '5px' }}>
+          <span style={{ color: '#ffff00' }}>R</span> - Scale
+        </div>
+        <div style={{ marginLeft: '10px', marginBottom: '8px' }}>
+          <span style={{ color: '#ffff00' }}>ESC</span> - Deselect
+        </div>
+        <div style={{ fontSize: '11px', color: '#aaa' }}>
+          Check browser console for detailed logs
+        </div>
+      </div>
+
+      {/* Status Panel */}
+      {selectedObject && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '10px',
+            right: '10px',
+            background: 'rgba(0,100,200,0.9)',
+            color: 'white',
+            padding: '15px',
+            borderRadius: '8px',
+            fontFamily: 'monospace',
+            fontSize: '12px'
+          }}
+        >
+          <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>
+            ✅ Object Selected
+          </div>
+          <div style={{ marginBottom: '5px' }}>
+            <strong>Object:</strong> {selectedObject.userData.name}
+          </div>
+          <div style={{ marginBottom: '5px' }}>
+            <strong>Mode:</strong> {transformMode.charAt(0).toUpperCase() + transformMode.slice(1)}
+          </div>
+          <div style={{ fontSize: '11px', color: '#ccc', marginTop: '8px' }}>
+            Drag the colored handles to transform!
+          </div>
+        </div>
+      )}
+
+      {/* Mode Buttons */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          gap: '10px'
+        }}
+      >
+        {['translate', 'rotate', 'scale'].map(mode => (
+          <button
+            key={mode}
+            onClick={() => {
+              if (transformControlsRef.current && selectedObject) {
+                transformControlsRef.current.setMode(mode);
+                setTransformMode(mode);
+                console.log(`🎮 Mode switched to: ${mode}`);
+              }
+            }}
+            style={{
+              padding: '10px 15px',
+              backgroundColor: transformMode === mode ? '#0066cc' : '#333',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: selectedObject ? 'pointer' : 'not-allowed',
+              opacity: selectedObject ? 1 : 0.5,
+              fontFamily: 'monospace',
+              fontSize: '12px',
+              textTransform: 'capitalize'
+            }}
+            disabled={!selectedObject}
+          >
+            {mode}
+          </button>
+        ))}
       </div>
     </div>
   );

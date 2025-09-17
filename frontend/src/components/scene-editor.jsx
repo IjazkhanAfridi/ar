@@ -273,37 +273,7 @@ export function SceneEditor({
     const gridHelper = new THREE.GridHelper(10, 10);
     scene.add(gridHelper);
     
-    // Add a test cube for testing transform controls (remove this in production)
-    const testGeometry = new THREE.BoxGeometry(1, 1, 1);
-    const testMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x00ff00,
-      transparent: true,
-      opacity: 0.8
-    });
-    const testCube = new THREE.Mesh(testGeometry, testMaterial);
-    testCube.position.set(2, 1, 0);
-    testCube.castShadow = true;
-    testCube.receiveShadow = true;
-    testCube.userData = {
-      id: 'test-cube',
-      type: 'content',
-      contentType: 'test',
-      selectable: true,
-      name: 'Test Cube',
-      config: {
-        position: { x: 2, y: 1, z: 0 },
-        rotation: { x: 0, y: 0, z: 0 },
-        scale: { x: 1, y: 1, z: 1 },
-        content: { type: 'test' }
-      }
-    };
-    scene.add(testCube);
-    console.log('Test cube added for transform controls testing');
-    
-    // Add test cube to scene objects for sidebar display
-    setTimeout(() => {
-      setSceneObjects(prev => [...prev, testCube]);
-    }, 100);
+    // Test cube removed - use dedicated debug pages for testing transform controls
 
     // Click handler
     const handleClick = (event) => {
