@@ -53,7 +53,7 @@ app.use(cookieParser(config.COOKIE_SECRET));
 app.use(logger.requestLogger());
 
 // Rate limiting for API routes
-app.use('/api', apiLimiter);
+// app.use('/api', apiLimiter);
 
 // Static file serving for uploads and experiences
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));

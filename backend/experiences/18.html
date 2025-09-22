@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>AR Experience - kdrtfgyuhjnmk</title>
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        font-family: Arial, sans-serif;
+      }
+      
+      .loading {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+        z-index: 1000;
+      }
+      
+      .controls {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 100;
+        display: flex;
+        gap: 10px;
+      }
+      
+      .control-btn {
+        background: rgba(255, 255, 255, 0.9);
+        border: none;
+        padding: 10px 20px;
+        border-radius: 25px;
+        cursor: pointer;
+        font-size: 16px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+      }
+      
+      .control-btn:hover {
+        background: white;
+        transform: scale(1.05);
+      }
+
+      .audio-control {
+        background: #4CAF50 !important;
+        color: white !important;
+      }
+
+      .audio-control.muted {
+        background: #f44336 !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loading" class="loading">
+      <div>Loading AR Experience...</div>
+      <div style="margin-top: 10px; font-size: 14px;">Point your camera at the marker image</div>
+    </div>
+    
+    <a-scene
+      mindar-image="imageTargetSrc: /uploads/mind-files/experience_18.mind; filterMinCF:0.0001; filterBeta: 0.01; showStats: false"
+      vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: false"
+    >
+      <a-assets>
+        <a-asset-item id="asset-obj_1756322523925_1iv8b5z" src="/uploads/1756322523804-Terracotta_Harmony_0516102104_texture.glb"></a-asset-item>
+      </a-assets>
+
+      <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse"></a-camera>
+
+      <a-entity mindar-image-target="targetIndex: 0">
+                <a-entity 
+          gltf-model="#asset-obj_1756322523925_1iv8b5z" 
+          position="0 0.04000000000000001 0" 
+          rotation="-90 0 0" 
+          scale="0.7 0.7 0.7"
+        ></a-entity>
+      </a-entity>
+    </a-scene>
+
+    <div class="controls">
+      
+      
+    </div>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        const loading = document.getElementById('loading');
+        const scene = document.querySelector('a-scene');
+        const audioToggle = document.getElementById('audioToggle');
+        const videoToggle = document.getElementById('videoToggle');
+        let audioPlaying = false;
+        let videoPlaying = false;
+        let audioEntities = [];
+        let videoEntities = [];
+
+        // Hide loading when AR is ready
+        scene.addEventListener('loaded', function() {
+          console.log('AR Scene loaded');
+          setTimeout(() => {
+            if (loading) {
+              loading.style.display = 'none';
+            }
+          }, 2000);
+        });
+
+        // Handle AR target found/lost
+        const arTarget = document.querySelector('[mindar-image-target]');
+        
+        if (arTarget) {
+          arTarget.addEventListener('targetFound', function() {
+            console.log('AR Target found!');
+            if (loading) {
+              loading.style.display = 'none';
+            }
+            
+            // Auto-play audio if enabled
+            if (!audioPlaying && audioEntities.length > 0) {
+              playAudios();
+            }
+            
+            // Auto-play video if enabled
+            if (!videoPlaying && videoEntities.length > 0) {
+              playVideos();
+            }
+          });
+
+          arTarget.addEventListener('targetLost', function() {
+            console.log('AR Target lost!');
+            // Pause all audios and videos when target is lost
+            pauseAudios();
+            pauseVideos();
+          });
+        }
+
+        // Initialize audio entities
+        function initAudioEntities() {
+          const entities = document.querySelectorAll('[data-audio-id]');
+          entities.forEach(entity => {
+            const audioId = entity.getAttribute('data-audio-id');
+            const audioElement = document.getElementById(audioId);
+            if (audioElement) {
+              audioEntities.push(audioElement);
+            }
+          });
+        }
+
+        // Play all audio
+        function playAudios() {
+          audioEntities.forEach(audio => {
+            audio.play().catch(e => console.log('Audio play failed:', e));
+          });
+          audioPlaying = true;
+          if (audioToggle) {
+            audioToggle.textContent = '🔊 Sound On';
+            audioToggle.classList.remove('muted');
+          }
+        }
+
+        // Pause all audio
+        function pauseAudios() {
+          audioEntities.forEach(audio => {
+            audio.pause();
+          });
+          audioPlaying = false;
+        }
+
+        // Mute all audio
+        function muteAudios() {
+          audioEntities.forEach(audio => {
+            audio.muted = true;
+          });
+          audioPlaying = false;
+          if (audioToggle) {
+            audioToggle.textContent = '🔇 Sound Off';
+            audioToggle.classList.add('muted');
+          }
+        }
+
+        // Unmute all audio
+        function unmuteAudios() {
+          audioEntities.forEach(audio => {
+            audio.muted = false;
+          });
+          if (audioToggle) {
+            audioToggle.textContent = '🔊 Sound On';
+            audioToggle.classList.remove('muted');
+          }
+        }
+
+        // Initialize video entities
+        function initVideoEntities() {
+          const entities = document.querySelectorAll('[data-video-id]');
+          entities.forEach(entity => {
+            const videoId = entity.getAttribute('data-video-id');
+            const videoElement = document.getElementById(videoId);
+            if (videoElement) {
+              videoEntities.push(videoElement);
+            }
+          });
+        }
+
+        // Play all videos
+        function playVideos() {
+          videoEntities.forEach(video => {
+            video.play().catch(e => console.log('Video play failed:', e));
+          });
+          videoPlaying = true;
+          if (videoToggle) {
+            videoToggle.textContent = '🎬 Video On';
+            videoToggle.classList.remove('muted');
+          }
+        }
+
+        // Pause all videos
+        function pauseVideos() {
+          videoEntities.forEach(video => {
+            video.pause();
+          });
+          videoPlaying = false;
+        }
+
+        // Mute all videos
+        function muteVideos() {
+          videoEntities.forEach(video => {
+            video.muted = true;
+          });
+          videoPlaying = false;
+          if (videoToggle) {
+            videoToggle.textContent = '🎬 Video Off';
+            videoToggle.classList.add('muted');
+          }
+        }
+
+        // Unmute all videos
+        function unmuteVideos() {
+          videoEntities.forEach(video => {
+            video.muted = false;
+          });
+          if (videoToggle) {
+            videoToggle.textContent = '🎬 Video On';
+            videoToggle.classList.remove('muted');
+          }
+        }
+
+        // Initialize audio and video controls
+        setTimeout(() => {
+          initAudioEntities();
+          initVideoEntities();
+          
+          if (audioToggle && audioEntities.length > 0) {
+            audioToggle.addEventListener('click', function() {
+              if (audioToggle.classList.contains('muted')) {
+                unmuteAudios();
+              } else {
+                muteAudios();
+              }
+            });
+          }
+          
+          if (videoToggle && videoEntities.length > 0) {
+            videoToggle.addEventListener('click', function() {
+              if (videoToggle.classList.contains('muted')) {
+                unmuteVideos();
+              } else {
+                muteVideos();
+              }
+            });
+          }
+        }, 1000);
+
+        // Error handling
+        window.addEventListener('error', function(e) {
+          console.error('AR Experience Error:', e.error);
+        });
+
+        // Prevent context menu on long press
+        document.addEventListener('contextmenu', function(e) {
+          e.preventDefault();
+        });
+      });
+    </script>
+  </body>
+</html>

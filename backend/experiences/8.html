@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <title>AR Experience - dgdf</title>
+    <title>AR Experience - asedrtfgyuhjiko</title>
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     <style>
@@ -73,32 +73,24 @@
       device-orientation-permission-ui="enabled: false"
     >
       <a-assets>
-        <audio id="asset-obj_1753022012227_l94us08rs" src="/uploads/1753022012027-320-Ilzaam - Jewel Thief The Heist Begins 320 Kbps.mp3" preload="auto" loop crossorigin="anonymous"></audio>
-        <img id="asset-obj_1753022055187_eojvk43wq" src="/uploads/1753022055017-my-image.jpg" crossorigin="anonymous" />
+        <a-asset-item id="asset-obj_1756320321160_8b8yq0j" src="/uploads/1756320321027-Terracotta_Harmony_0516102104_texture.glb"></a-asset-item>
       </a-assets>
 
       <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse"></a-camera>
 
       <a-entity mindar-image-target="targetIndex: 0">
                 <a-entity 
-            id="audio-entity-obj_1753022012227_l94us08rs"
-            position="0.2 0.3 -0.6" 
-            rotation="0 0 0" 
-            scale="1 1 1"
-            visible="false"
-            data-audio-id="asset-obj_1753022012227_l94us08rs"
-          ></a-entity>
-        <a-image 
-          src="#asset-obj_1753022055187_eojvk43wq" 
-          position="0 1 0" 
-          rotation="0 0 0" 
-          scale="1 1 1"
-        ></a-image>
+          gltf-model="#asset-obj_1756320321160_8b8yq0j" 
+          position="0 0.5 0" 
+          rotation="-90 0 0" 
+          scale="0.6 0.6 0.6"
+        ></a-entity>
       </a-entity>
     </a-scene>
 
     <div class="controls">
-      <button id="audioToggle" class="control-btn audio-control">🔊 Sound On</button>
+      
+      
     </div>
 
     <script>
@@ -106,8 +98,11 @@
         const loading = document.getElementById('loading');
         const scene = document.querySelector('a-scene');
         const audioToggle = document.getElementById('audioToggle');
+        const videoToggle = document.getElementById('videoToggle');
         let audioPlaying = false;
+        let videoPlaying = false;
         let audioEntities = [];
+        let videoEntities = [];
 
         // Hide loading when AR is ready
         scene.addEventListener('loaded', function() {
@@ -133,12 +128,18 @@
             if (!audioPlaying && audioEntities.length > 0) {
               playAudios();
             }
+            
+            // Auto-play video if enabled
+            if (!videoPlaying && videoEntities.length > 0) {
+              playVideos();
+            }
           });
 
           arTarget.addEventListener('targetLost', function() {
             console.log('AR Target lost!');
-            // Pause all audios when target is lost
+            // Pause all audios and videos when target is lost
             pauseAudios();
+            pauseVideos();
           });
         }
 
@@ -197,9 +198,65 @@
           }
         }
 
-        // Initialize audio controls
+        // Initialize video entities
+        function initVideoEntities() {
+          const entities = document.querySelectorAll('[data-video-id]');
+          entities.forEach(entity => {
+            const videoId = entity.getAttribute('data-video-id');
+            const videoElement = document.getElementById(videoId);
+            if (videoElement) {
+              videoEntities.push(videoElement);
+            }
+          });
+        }
+
+        // Play all videos
+        function playVideos() {
+          videoEntities.forEach(video => {
+            video.play().catch(e => console.log('Video play failed:', e));
+          });
+          videoPlaying = true;
+          if (videoToggle) {
+            videoToggle.textContent = '🎬 Video On';
+            videoToggle.classList.remove('muted');
+          }
+        }
+
+        // Pause all videos
+        function pauseVideos() {
+          videoEntities.forEach(video => {
+            video.pause();
+          });
+          videoPlaying = false;
+        }
+
+        // Mute all videos
+        function muteVideos() {
+          videoEntities.forEach(video => {
+            video.muted = true;
+          });
+          videoPlaying = false;
+          if (videoToggle) {
+            videoToggle.textContent = '🎬 Video Off';
+            videoToggle.classList.add('muted');
+          }
+        }
+
+        // Unmute all videos
+        function unmuteVideos() {
+          videoEntities.forEach(video => {
+            video.muted = false;
+          });
+          if (videoToggle) {
+            videoToggle.textContent = '🎬 Video On';
+            videoToggle.classList.remove('muted');
+          }
+        }
+
+        // Initialize audio and video controls
         setTimeout(() => {
           initAudioEntities();
+          initVideoEntities();
           
           if (audioToggle && audioEntities.length > 0) {
             audioToggle.addEventListener('click', function() {
@@ -207,6 +264,16 @@
                 unmuteAudios();
               } else {
                 muteAudios();
+              }
+            });
+          }
+          
+          if (videoToggle && videoEntities.length > 0) {
+            videoToggle.addEventListener('click', function() {
+              if (videoToggle.classList.contains('muted')) {
+                unmuteVideos();
+              } else {
+                muteVideos();
               }
             });
           }

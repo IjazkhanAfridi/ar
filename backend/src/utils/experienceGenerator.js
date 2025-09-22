@@ -22,10 +22,10 @@ const __dirname = path.dirname(__filename);
 // These defaults aim to fix reported issues where media appeared far above
 // (because 1 unit = 1 meter in A-Frame) and with an unexpected angle.
 // Adjust in a .env file if needed and regenerate HTML (see regenerate-html.js).
-const POSITION_SCALE = parseFloat(process.env.AR_POSITION_SCALE || '0.1');
-const FLATTEN_IMAGES = (process.env.AR_FLATTEN_IMAGES || 'true').toLowerCase() === 'true';
-const IMAGE_Z_OFFSET = parseFloat(process.env.AR_IMAGE_Z_OFFSET || '0.01');
-const AUTO_FIX_ROT_X = (process.env.AR_AUTO_FIX_ROT_X || 'true').toLowerCase() === 'true';
+const POSITION_SCALE = parseFloat(process.env.AR_POSITION_SCALE || '0.5');
+const FLATTEN_IMAGES = (process.env.AR_FLATTEN_IMAGES || 'false').toLowerCase() === 'true';
+const IMAGE_Z_OFFSET = parseFloat(process.env.AR_IMAGE_Z_OFFSET || '0.3');
+const AUTO_FIX_ROT_X = (process.env.AR_AUTO_FIX_ROT_X || 'false').toLowerCase() === 'true';
 
 function transformPlacement(obj) {
   // Original values (assume numbers)
@@ -37,22 +37,15 @@ function transformPlacement(obj) {
   y *= POSITION_SCALE;
   z *= POSITION_SCALE;
 
-  const isMedia = obj.content && ['image', 'video'].includes(obj.content.type);
+  // For TOP-DOWN view (looking DOWN at cup from ABOVE)
+  // POSITIVE 90 degrees to look down from top, not up from bottom
+  rx = 90;  // POSITIVE 90 degrees on X-axis for proper top-down view
+  ry = 0;   // No Y rotation
+  rz = 0;   // No Z rotation
 
-  // Flatten images/videos onto marker plane if requested
-  if (isMedia && FLATTEN_IMAGES) {
-    // If user already specified a non-zero rotation.x we respect it
-    if (Math.abs(rx) < 0.0001) {
-      rx = -90; // Lay flat on marker (MindAR target plane is XY)
-    }
-    // When flattened, move slightly up in Z to avoid z-fighting
-    if (Math.abs(z) < 0.0001) {
-      z = IMAGE_Z_OFFSET;
-    }
-  } else if (isMedia && AUTO_FIX_ROT_X && !FLATTEN_IMAGES) {
-    // If not flattening globally but rotation is exactly zero (likely unconfigured)
-    // and user expects upright billboard, leave as is; else we could add heuristics.
-    // Current heuristic: do nothing (placeholder for future logic)
+  // Ensure objects are positioned properly on the marker plane
+  if (Math.abs(y) < 0.001) {
+    y = IMAGE_Z_OFFSET; // Slightly above the marker to be visible
   }
 
   return {

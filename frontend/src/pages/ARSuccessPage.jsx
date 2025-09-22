@@ -114,13 +114,13 @@ const ARSuccessPage = () => {
           </button>
           <button 
             onClick={handleViewExperience}
-            className='flex items-center gap-2 py-3 px-5 bg-amber-700 text-white rounded-md hover:bg-amber-600 transition-colors min-w-[140px] justify-center'
+            className='flex items-center gap-2 py-3 px-5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors min-w-[140px] justify-center'
           >
             <FaEye /> View
           </button>
           <button 
             onClick={handleReturnToDashboard}
-            className='flex items-center gap-2 py-3 px-5 bg-blue-700 text-white rounded-md hover:bg-blue-600 transition-colors min-w-[140px] justify-center'
+            className='flex items-center gap-2 py-3 px-5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors min-w-[140px] justify-center'
           >
             <FaTh /> My Experiences
           </button>

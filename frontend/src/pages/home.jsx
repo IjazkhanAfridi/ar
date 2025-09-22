@@ -72,13 +72,13 @@ export default function Home() {
         <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
           {experienceTypes.map((type) => (
             <Link key={type.id} to={type.path}>
-              <Card className='bg-slate-800/70 border-slate-700 hover:border-amber-600/50 hover:bg-slate-800 transition-all cursor-pointer h-full'>
+              <Card className='bg-slate-800/70 border-slate-700 hover:border-blue-500/50 hover:bg-slate-800 transition-all cursor-pointer h-full'>
                 <div className='p-6 flex flex-col items-center text-center'>
-                  <div className='bg-gray-100 h-16 w-16 rounded-full flex items-center justify-center mb-6'>
-                    <type.icon className='h-8 w-8' />
+                  <div className='bg-slate-700 h-16 w-16 rounded-full flex items-center justify-center mb-6'>
+                    <type.icon className='h-8 w-8 text-slate-300' />
                   </div>
-                  <h3 className='text-lg text-gray-100 font-medium mb-2'>{type.title}</h3>
-                  <p className='text-gray-100 text-sm'>{type.description}</p>
+                  <h3 className='text-lg text-white font-medium mb-2'>{type.title}</h3>
+                  <p className='text-slate-400 text-sm'>{type.description}</p>
                 </div>
               </Card>
             </Link>

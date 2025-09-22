@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <title>AR Experience - new experience</title>
+    <title>AR Experience - xdcfgvjnhmkl</title>
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     <style>
@@ -73,35 +73,24 @@
       device-orientation-permission-ui="enabled: false"
     >
       <a-assets>
-        <video id="asset-obj_1753126042171_ypb9bik52" src="/uploads/1753126041994-856787-hd_1920_1080_30fps.mp4" loop crossorigin="anonymous" preload="auto"></video>
-        <audio id="asset-obj_1753126069536_sp4tjcycd" src="/uploads/1753126069383-320-Ilzaam - Jewel Thief The Heist Begins 320 Kbps.mp3" preload="auto" loop crossorigin="anonymous"></audio>
+        <a-asset-item id="asset-obj_1756321292073_g7cz58v" src="/uploads/1756321291941-Terracotta_Harmony_0516102104_texture.glb"></a-asset-item>
       </a-assets>
 
       <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse"></a-camera>
 
       <a-entity mindar-image-target="targetIndex: 0">
-                <a-video 
-          src="#asset-obj_1753126042171_ypb9bik52" 
-          position="0.1 0.6 -0.3" 
-          rotation="0 0 0" 
-          scale="1 1 1"
-          autoplay="true"
-          data-video-id="asset-obj_1753126042171_ypb9bik52"
-        ></a-video>
-        <a-entity 
-            id="audio-entity-obj_1753126069536_sp4tjcycd"
-            position="0 0.3 0.2" 
-            rotation="0 0 0" 
-            scale="1 1 1"
-            visible="false"
-            data-audio-id="asset-obj_1753126069536_sp4tjcycd"
-          ></a-entity>
+                <a-entity 
+          gltf-model="#asset-obj_1756321292073_g7cz58v" 
+          position="0 0.05 0" 
+          rotation="-90 0 0" 
+          scale="0.6 0.6 0.6"
+        ></a-entity>
       </a-entity>
     </a-scene>
 
     <div class="controls">
-      <button id="audioToggle" class="control-btn audio-control">🔊 Sound On</button>
-      <button id="videoToggle" class="control-btn video-control">🎬 Video On</button>
+      
+      
     </div>
 
     <script>

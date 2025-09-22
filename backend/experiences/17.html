@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>AR Experience - Position Test Experience</title>
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        font-family: Arial, sans-serif;
+      }
+      
+      .loading {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+        z-index: 1000;
+      }
+      
+      .controls {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 100;
+        display: flex;
+        gap: 10px;
+      }
+      
+      .control-btn {
+        background: rgba(255, 255, 255, 0.9);
+        border: none;
+        padding: 10px 20px;
+        border-radius: 25px;
+        cursor: pointer;
+        font-size: 16px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+      }
+      
+      .control-btn:hover {
+        background: white;
+        transform: scale(1.05);
+      }
+
+      .audio-control {
+        background: #4CAF50 !important;
+        color: white !important;
+      }
+
+      .audio-control.muted {
+        background: #f44336 !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loading" class="loading">
+      <div>Loading AR Experience...</div>
+      <div style="margin-top: 10px; font-size: 14px;">Point your camera at any marker image</div>
+    </div>
+    
+    <a-scene
+      mindar-image="imageTargetSrc: /uploads/mind-files/test.mind; filterMinCF:0.0001; filterBeta: 0.01; showStats: false"
+      vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: false"
+    >
+      <a-assets>
+        <img id="target-0-asset-obj_test_123" src="/uploads/test-image.jpg" crossorigin="anonymous" />
+      </a-assets>
+
+  <!-- Top-down camera: rotate 90deg on X to look downward while keeping position at origin -->
+  <a-camera position="0 0 0" rotation="90 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse"></a-camera>
+
+      <a-entity mindar-image-target="targetIndex: 0">
+        <a-image 
+            src="#target-0-asset-obj_test_123" 
+            position="0.1 1 0" 
+            rotation="90 0 0" 
+            scale="1 1 1"
+            side="double"
+            crossorigin="anonymous"
+          ></a-image>
+      </a-entity>
+    </a-scene>
+
+    <div class="controls">
+      <button id="audioToggle" class="control-btn audio-control">🔊 Sound On</button>
+    </div>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        const loading = document.getElementById('loading');
+        const scene = document.querySelector('a-scene');
+        const audioToggle = document.getElementById('audioToggle');
+        let audioPlaying = false;
+        let audioEntities = [];
+
+        // Hide loading when AR is ready
+        scene.addEventListener('loaded', function() {
+          console.log('Multiple Image AR Scene loaded');
+          setTimeout(() => {
+            if (loading) {
+              loading.style.display = 'none';
+            }
+          }, 2000);
+        });
+
+        // Handle AR targets
+        const arTargets = document.querySelectorAll('[mindar-image-target]');
+        
+        arTargets.forEach((target, index) => {
+          target.addEventListener('targetFound', function() {
+            console.log('AR Target', index, 'found!');
+            if (loading) {
+              loading.style.display = 'none';
+            }
+          });
+
+          target.addEventListener('targetLost', function() {
+            console.log('AR Target', index, 'lost!');
+          });
+        });
+
+        // Initialize audio entities
+        function initAudioEntities() {
+          const entities = document.querySelectorAll('[data-audio-id]');
+          entities.forEach(entity => {
+            const audioId = entity.getAttribute('data-audio-id');
+            const audioElement = document.getElementById(audioId);
+            if (audioElement) {
+              audioEntities.push(audioElement);
+            }
+          });
+        }
+
+        // Audio controls
+        function muteAudios() {
+          audioEntities.forEach(audio => {
+            audio.muted = true;
+          });
+          if (audioToggle) {
+            audioToggle.textContent = '🔇 Sound Off';
+            audioToggle.classList.add('muted');
+          }
+        }
+
+        function unmuteAudios() {
+          audioEntities.forEach(audio => {
+            audio.muted = false;
+          });
+          if (audioToggle) {
+            audioToggle.textContent = '🔊 Sound On';
+            audioToggle.classList.remove('muted');
+          }
+        }
+
+        // Initialize
+        setTimeout(() => {
+          initAudioEntities();
+          
+          if (audioToggle && audioEntities.length > 0) {
+            audioToggle.addEventListener('click', function() {
+              if (audioToggle.classList.contains('muted')) {
+                unmuteAudios();
+              } else {
+                muteAudios();
+              }
+            });
+          } else if (audioToggle) {
+            audioToggle.style.display = 'none';
+          }
+        }, 1000);
+
+        // Error handling
+        window.addEventListener('error', function(e) {
+          console.error('Multiple Image AR Experience Error:', e.error);
+        });
+
+        // Prevent context menu
+        document.addEventListener('contextmenu', function(e) {
+          e.preventDefault();
+        });
+      });
+    </script>
+  </body>
+</html>
