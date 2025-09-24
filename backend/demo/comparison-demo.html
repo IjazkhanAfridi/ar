@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>AR Top-Down View Fix - Before vs After Comparison</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        .panel {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .panel h3 {
+            margin-top: 0;
+            color: #fff;
+            text-align: center;
+            font-size: 1.5em;
+        }
+        .before {
+            border-left: 5px solid #ff4757;
+        }
+        .after {
+            border-left: 5px solid #2ed573;
+        }
+        .code-block {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        .issue {
+            color: #ff6b6b;
+            font-weight: bold;
+        }
+        .fixed {
+            color: #51cf66;
+            font-weight: bold;
+        }
+        .summary {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 30px;
+            text-align: center;
+        }
+        .icon {
+            font-size: 2em;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌍 AR Top-Down View Fix</h1>
+            <h2>Perfect "Sky to Earth" Perspective Achieved!</h2>
+            <p>Comparison of the problematic side view vs. the corrected top-down view</p>
+        </div>
+
+        <div class="comparison">
+            <div class="panel before">
+                <h3>❌ BEFORE (Side View Problem)</h3>
+                
+                <h4>Rotation Values:</h4>
+                <div class="code-block">
+                    <div class="issue">Images: rotation="90 0 0"</div>
+                    <div class="issue">Videos: rotation="90 0 0"</div>
+                    <div class="issue">Models: rotation="90 0 0"</div>
+                </div>
+
+                <h4>Generated A-Frame Code:</h4>
+                <div class="code-block">
+&lt;a-image 
+  position="0 0.3 0" 
+  <span class="issue">rotation="90 0 0"</span>
+  scale="1 1 1"&gt;
+&lt;/a-image&gt;
+
+&lt;a-entity 
+  gltf-model="#model" 
+  position="0.5 0.3 0" 
+  <span class="issue">rotation="90 0 0"</span>
+  scale="1 1 1"&gt;
+&lt;/a-entity&gt;
+                </div>
+
+                <h4>❌ Issues:</h4>
+                <ul>
+                    <li>All objects tilted at 90° causing side view</li>
+                    <li>Images appear vertical instead of flat</li>
+                    <li>Models appear from wrong angle</li>
+                    <li>Not a "sky to earth" perspective</li>
+                    <li>Hard-coded rotation for all content types</li>
+                </ul>
+            </div>
+
+            <div class="panel after">
+                <h3>✅ AFTER (Top-Down View Fixed)</h3>
+                
+                <h4>Rotation Values:</h4>
+                <div class="code-block">
+                    <div class="fixed">Images: rotation="-90 0 0"</div>
+                    <div class="fixed">Videos: rotation="-90 0 0"</div>
+                    <div class="fixed">Models: rotation="0 0 0"</div>
+                </div>
+
+                <h4>Generated A-Frame Code:</h4>
+                <div class="code-block">
+&lt;a-image 
+  position="0 0.01 0.01" 
+  <span class="fixed">rotation="-90 0 0"</span>
+  scale="1 1 1"&gt;
+&lt;/a-image&gt;
+
+&lt;a-entity 
+  gltf-model="#model" 
+  position="0.1 0.01 0" 
+  <span class="fixed">rotation="0 0 0"</span>
+  scale="1 1 1"&gt;
+&lt;/a-entity&gt;
+                </div>
+
+                <h4>✅ Improvements:</h4>
+                <ul>
+                    <li>Images lay flat facing upward (-90°)</li>
+                    <li>Models stay upright for proper viewing (0°)</li>
+                    <li>Perfect "sky to earth" top-down perspective</li>
+                    <li>Content-type aware transformations</li>
+                    <li>Optimized positioning and scaling</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="summary">
+            <div class="icon">🎯</div>
+            <h3>Key Technical Changes Made</h3>
+            <div style="text-align: left; max-width: 800px; margin: 0 auto;">
+                <h4>1. Fixed transformPlacement() Function:</h4>
+                <ul>
+                    <li><strong>Images & Videos:</strong> <code>rotation="-90 0 0"</code> - Lay flat on marker plane, facing upward</li>
+                    <li><strong>3D Models:</strong> <code>rotation="0 0 0"</code> - Stay upright when viewed from above</li>
+                    <li><strong>Audio & Lights:</strong> Preserve original rotations or apply minimal adjustments</li>
+                </ul>
+
+                <h4>2. Updated Configuration Defaults:</h4>
+                <ul>
+                    <li><code>POSITION_SCALE: 0.1</code> (was 0.5) - Better scaling</li>
+                    <li><code>FLATTEN_IMAGES: true</code> (was false) - Enable image flattening</li>
+                    <li><code>IMAGE_Z_OFFSET: 0.01</code> (was 0.3) - Smaller offset to avoid floating</li>
+                </ul>
+
+                <h4>3. Applied to Both Experience Types:</h4>
+                <ul>
+                    <li>Single image experiences</li>
+                    <li>Multiple image experiences</li>
+                </ul>
+            </div>
+
+            <div class="icon">🌍</div>
+            <h3>Result: Perfect "Sky to Earth" Top-Down View!</h3>
+            <p>The AR application now correctly displays content from a top-down perspective, exactly as if viewing from the sky down to earth.</p>
+        </div>
+    </div>
+</body>
+</html>
