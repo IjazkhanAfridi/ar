@@ -19,15 +19,4 @@ export const pool = new Pool({
 
 export const db = drizzle({ client: pool, schema });
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('Closing database connection pool...');
-  await pool.end();
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  console.log('Closing database connection pool...');
-  await pool.end();
-  process.exit(0);
-});
+// Note: Signal handlers moved to server.js to avoid conflicts

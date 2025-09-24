@@ -40,6 +40,7 @@ class ExperienceController {
 
     // Handle marker image - expect base64 data in body (like working version)
     let markerImageUrl = '';
+    let originalDimensions = null;
 
     if (!markerImage) {
       return res.status(400).json({
@@ -53,16 +54,36 @@ class ExperienceController {
       const base64Data = markerImage.split(',')[1];
       const markerImageBuffer = Buffer.from(base64Data, 'base64');
 
-      // Save marker image buffer to file
+      // Get original image dimensions before processing
+      try {
+        const Sharp = (await import('sharp')).default;
+        const metadata = await Sharp(markerImageBuffer).metadata();
+        originalDimensions = {
+          width: metadata.width,
+          height: metadata.height,
+          aspectRatio: metadata.width / metadata.height
+        };
+        console.log('Original marker dimensions:', originalDimensions);
+      } catch (error) {
+        console.warn('Could not extract marker dimensions:', error.message);
+      }
+
+      // Save marker image buffer to file (preserve original dimensions if possible)
       const savedFile = await fileService.saveFile(
         markerImageBuffer,
         `marker-${Date.now()}.png`,
         {
           processImage: true,
-          imageOptions: { width: 1024, height: 1024, quality: 90 },
+          imageOptions: { 
+            width: originalDimensions?.width || 1024, 
+            height: originalDimensions?.height || 1024, 
+            quality: 90,
+            fit: 'contain' // Preserve aspect ratio
+          },
         }
       );
       markerImageUrl = savedFile.url;
+
     } else {
       return res.status(400).json({
         success: false,
@@ -70,7 +91,7 @@ class ExperienceController {
       });
     }
 
-    // Parse content config if it's a string
+    // Parse content config if it's a string FIRST
     let parsedContentConfig;
     try {
       parsedContentConfig =
@@ -84,10 +105,16 @@ class ExperienceController {
       });
     }
 
+    // Store marker dimensions in experience data (after parsing contentConfig)
+    if (originalDimensions) {
+      parsedContentConfig.markerDimensions = originalDimensions;
+    }
+
     const experienceData = {
       title,
       description,
       markerImage: markerImageUrl,
+      markerDimensions: parsedContentConfig.markerDimensions,
       contentConfig: parsedContentConfig,
     };
 

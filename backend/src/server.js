@@ -11,6 +11,7 @@ import { logger } from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { apiLimiter } from './middleware/rateLimiter.js';
 import apiRoutes from './routes/index.js';
+import { pool } from './config/database.js';
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -79,23 +80,38 @@ const server = app.listen(config.PORT, config.HOST, () => {
 });
 
 // Graceful shutdown
-const gracefulShutdown = (signal) => {
+const gracefulShutdown = async (signal) => {
   logger.info(`Received ${signal}. Starting graceful shutdown...`, 'server');
 
-  server.close(() => {
-    logger.info('HTTP server closed', 'server');
-    process.exit(0);
-  });
+  try {
+    // Close HTTP server
+    await new Promise((resolve) => {
+      server.close(() => {
+        logger.info('HTTP server closed', 'server');
+        resolve();
+      });
+    });
 
-  // Force close after 10 seconds
-  setTimeout(() => {
-    logger.error(
-      'Could not close connections in time, forcefully shutting down',
-      'server'
-    );
-    process.exit(1);
-  }, 10000);
+    // Close database pool
+    logger.info('Closing database connection pool...', 'server');
+    await pool.end();
+    logger.info('Database pool closed', 'server');
+    
+  } catch (error) {
+    logger.error('Error during shutdown:', 'server', error);
+  }
+
+  process.exit(0);
 };
+
+// Commented out force shutdown for debugging
+// const forceShutdown = setTimeout(() => {
+//   logger.error(
+//     'Could not close connections in time, forcefully shutting down',
+//     'server'
+//   );
+//   process.exit(1);
+// }, 10000);
 
 // Handle shutdown signals
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

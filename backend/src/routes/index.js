@@ -9,6 +9,7 @@ const router = express.Router();
 
 // Health check endpoint
 router.get('/health', (req, res) => {
+  console.log('Health endpoint hit!'); // Debug log
   res.json({
     success: true,
     message: 'AR Configurator API is running',

@@ -10,48 +10,113 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ---------------------------------------------------------------------------
-// Transformation Configuration
+// Transformation Configuration - IMPROVED FOR ACCURATE POSITIONING
 // ---------------------------------------------------------------------------
-// You can tune the spatial mapping between the authoring UI coordinate system
-// and the live MindAR coordinate system using environment variables:
-//   AR_POSITION_SCALE   -> multiplies every x,y,z (default 0.1 to reduce "floating")
-//   AR_FLATTEN_IMAGES   -> if 'true' rotates images & videos to lie on the marker
-//   AR_IMAGE_Z_OFFSET   -> small offset (default 0.01) to avoid z-fighting when flattened
-//   AR_AUTO_FIX_ROT_X   -> if 'true' and flatten disabled, will rotate images/videos
-//                           by -90deg on X ONLY when all rotation values are 0
-// These defaults aim to fix reported issues where media appeared far above
-// (because 1 unit = 1 meter in A-Frame) and with an unexpected angle.
-// Adjust in a .env file if needed and regenerate HTML (see regenerate-html.js).
-const POSITION_SCALE = parseFloat(process.env.AR_POSITION_SCALE || '0.5');
-const FLATTEN_IMAGES = (process.env.AR_FLATTEN_IMAGES || 'false').toLowerCase() === 'true';
-const IMAGE_Z_OFFSET = parseFloat(process.env.AR_IMAGE_Z_OFFSET || '0.3');
-const AUTO_FIX_ROT_X = (process.env.AR_AUTO_FIX_ROT_X || 'false').toLowerCase() === 'true';
+// Configuration for precise positioning optimized for TOP-DOWN VIEW (Sky to Earth perspective)
+const POSITION_SCALE = parseFloat(process.env.AR_POSITION_SCALE || '1.0'); // 1:1 scale for accurate positioning
+const ENFORCE_TOP_DOWN_VIEW = (process.env.AR_ENFORCE_TOP_DOWN || 'true').toLowerCase() === 'true'; // Always enforce top-down view
+const Y_OFFSET_FOR_VISIBILITY = parseFloat(process.env.AR_Y_OFFSET || '0.02'); // Small offset to ensure visibility above marker
+const PRESERVE_USER_TRANSFORMS = (process.env.AR_PRESERVE_TRANSFORMS || 'false').toLowerCase() === 'true'; // Force top-down transforms by default
 
-function transformPlacement(obj) {
-  // Original values (assume numbers)
+function transformPlacement(obj, markerDimensions = null) {
+  // Original values from the creation experience
   let { x, y, z } = obj.position || { x: 0, y: 0, z: 0 };
   let { x: rx, y: ry, z: rz } = obj.rotation || { x: 0, y: 0, z: 0 };
+  let { x: sx, y: sy, z: sz } = obj.scale || { x: 1, y: 1, z: 1 };
 
-  // Scale down positions to avoid large meter offsets
+  // Apply position scaling for AR space
   x *= POSITION_SCALE;
   y *= POSITION_SCALE;
   z *= POSITION_SCALE;
 
-  // For TOP-DOWN view (looking DOWN at cup from ABOVE)
-  // POSITIVE 90 degrees to look down from top, not up from bottom
-  rx = 90;  // POSITIVE 90 degrees on X-axis for proper top-down view
-  ry = 0;   // No Y rotation
-  rz = 0;   // No Z rotation
-
-  // Ensure objects are positioned properly on the marker plane
-  if (Math.abs(y) < 0.001) {
-    y = IMAGE_Z_OFFSET; // Slightly above the marker to be visible
+  // TOP-DOWN VIEW TRANSFORMATION - "Sky to Earth" perspective
+  if (ENFORCE_TOP_DOWN_VIEW) {
+    // For top-down view, we need to ensure objects are oriented correctly
+    // when viewed from above (like looking down from the sky to earth)
+    
+    switch (obj.content.type) {
+      case 'image':
+        // Images should lay flat on the marker plane, facing upward
+        // For true top-down view: -90 degrees on X-axis makes the image lie flat and face up
+        rx = -Math.PI / 2; // -90 degrees in radians
+        ry = 0;
+        rz = 0;
+        // Position images on or slightly above the marker plane
+        y = Math.max(y, Y_OFFSET_FOR_VISIBILITY);
+        break;
+        
+      case 'video':
+        // Same as images - should lay flat facing upward
+        rx = -Math.PI / 2; // -90 degrees in radians  
+        ry = 0;
+        rz = 0;
+        y = Math.max(y, Y_OFFSET_FOR_VISIBILITY);
+        break;
+        
+      case 'model':
+        // Models may need different handling depending on their natural orientation
+        // If user hasn't set specific rotation, orient for top-down view
+        if (Math.abs(rx) < 0.01 && Math.abs(ry) < 0.01 && Math.abs(rz) < 0.01) {
+          // Default: keep model upright for top-down viewing
+          // Most models are created to be viewed from the side, so no rotation needed
+          rx = 0;
+          ry = 0; 
+          rz = 0;
+        } else {
+          // Preserve user's rotation but ensure it works for top-down view
+          // Convert degrees to radians if needed
+          rx = rx > Math.PI ? rx * (Math.PI / 180) : rx;
+          ry = ry > Math.PI ? ry * (Math.PI / 180) : ry;
+          rz = rz > Math.PI ? rz * (Math.PI / 180) : rz;
+        }
+        // Keep model positioning as set by user, but ensure minimum height
+        y = Math.max(y, Y_OFFSET_FOR_VISIBILITY);
+        break;
+        
+      case 'light':
+        // Lights should be positioned above the scene for top-down illumination
+        // Convert degrees to radians if needed
+        rx = rx > Math.PI ? rx * (Math.PI / 180) : rx;
+        ry = ry > Math.PI ? ry * (Math.PI / 180) : ry;
+        rz = rz > Math.PI ? rz * (Math.PI / 180) : rz;
+        // Position lights above for better top-down illumination
+        y = Math.max(y, 1.0); // Ensure lights are well above the marker
+        break;
+        
+      case 'audio':
+        // Audio sources can be positioned anywhere, preserve user settings
+        rx = rx > Math.PI ? rx * (Math.PI / 180) : rx;
+        ry = ry > Math.PI ? ry * (Math.PI / 180) : ry;
+        rz = rz > Math.PI ? rz * (Math.PI / 180) : rz;
+        break;
+        
+      default:
+        // For any other types, preserve user rotation
+        rx = rx > Math.PI ? rx * (Math.PI / 180) : rx;
+        ry = ry > Math.PI ? ry * (Math.PI / 180) : ry;
+        rz = rz > Math.PI ? rz * (Math.PI / 180) : rz;
+    }
+  } else {
+    // When top-down view is disabled, preserve user rotations
+    rx = rx > Math.PI ? rx * (Math.PI / 180) : rx;
+    ry = ry > Math.PI ? ry * (Math.PI / 180) : ry;
+    rz = rz > Math.PI ? rz * (Math.PI / 180) : rz;
   }
 
+  // Ensure objects are positioned for optimal visibility
+  if (Math.abs(y) < 0.001) {
+    y = Y_OFFSET_FOR_VISIBILITY;
+  }
+
+  // Convert radians back to degrees for A-Frame (A-Frame uses degrees)
+  const rotationXDeg = rx * (180 / Math.PI);
+  const rotationYDeg = ry * (180 / Math.PI);
+  const rotationZDeg = rz * (180 / Math.PI);
+
   return {
-    positionStr: `${x} ${y} ${z}`,
-    rotationStr: `${rx} ${ry} ${rz}`,
-    scaleStr: `${obj.scale.x} ${obj.scale.y} ${obj.scale.z}`,
+    positionStr: `${x.toFixed(3)} ${y.toFixed(3)} ${z.toFixed(3)}`,
+    rotationStr: `${rotationXDeg.toFixed(1)} ${rotationYDeg.toFixed(1)} ${rotationZDeg.toFixed(1)}`,
+    scaleStr: `${sx.toFixed(3)} ${sy.toFixed(3)} ${sz.toFixed(3)}`,
   };
 }
 
@@ -69,7 +134,7 @@ export function generateExperienceHtml(experience) {
     throw new Error('At least one scene object is required');
   }
 
-  console.log('Generating HTML for experience:', {
+  console.log('Generating HTML for experience with TOP-DOWN VIEW optimization:', {
     id: experience.id,
     title: experience.title,
     mindFile: experience.mindFile,
@@ -77,6 +142,9 @@ export function generateExperienceHtml(experience) {
     audioCount: experience.contentConfig.sceneObjects.filter(
       (obj) => obj.content.type === 'audio'
     ).length,
+    topDownViewEnabled: ENFORCE_TOP_DOWN_VIEW,
+    positionScale: POSITION_SCALE,
+    yOffset: Y_OFFSET_FOR_VISIBILITY,
   });
 
   const assets = experience.contentConfig.sceneObjects
@@ -98,9 +166,12 @@ export function generateExperienceHtml(experience) {
     .filter(Boolean)
     .join('\n        ');
 
+  // Extract marker dimensions if available (for better positioning context)
+  const markerDimensions = experience.markerDimensions || null;
+
   const entities = experience.contentConfig.sceneObjects
     .map((obj) => {
-      const { positionStr, rotationStr, scaleStr } = transformPlacement(obj);
+      const { positionStr, rotationStr, scaleStr } = transformPlacement(obj, markerDimensions);
 
       switch (obj.content.type) {
         case 'image':
@@ -239,7 +310,14 @@ export function generateExperienceHtml(experience) {
         ${assets}
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse"></a-camera>
+      <a-camera 
+        position="0 0 0" 
+        look-controls="enabled: false" 
+        cursor="fuse: false; rayOrigin: mouse"
+        fov="80"
+        near="0.01"
+        far="1000"
+      ></a-camera>
 
       <a-entity mindar-image-target="targetIndex: 0">
         ${entities}
@@ -536,40 +614,45 @@ export function generateMultipleImageExperienceHtml(experience) {
     const entities = target.sceneObjects
       .map((obj) => {
         const assetId = `target-${targetIndex}-asset-${obj.id}`;
-        const position = `${obj.position.x} ${obj.position.y} ${obj.position.z}`;
-        const rotation = `${obj.rotation.x} ${obj.rotation.y} ${obj.rotation.z}`;
-        const scale = `${obj.scale.x} ${obj.scale.y} ${obj.scale.z}`;
+        // Apply the same transform logic for consistent top-down view
+        const { positionStr, rotationStr, scaleStr } = transformPlacement(obj);
 
         switch (obj.content.type) {
           case 'image':
             return `        <a-image 
             src="#${assetId}" 
-            position="${position}" 
-            rotation="${rotation}" 
-            scale="${scale}"
+            position="${positionStr}" 
+            rotation="${rotationStr}" 
+            scale="${scaleStr}"
+            side="double"
+            crossorigin="anonymous"
           ></a-image>`;
 
           case 'video':
             return `        <a-video 
             src="#${assetId}" 
-            position="${position}" 
-            rotation="${rotation}" 
-            scale="${scale}"
+            position="${positionStr}" 
+            rotation="${rotationStr}" 
+            scale="${scaleStr}"
             autoplay="true"
+            data-video-id="${assetId}"
+            crossorigin="anonymous"
+            playsinline
+            webkit-playsinline
           ></a-video>`;
 
           case 'model':
             return `        <a-entity 
             gltf-model="#${assetId}" 
-            position="${position}" 
-            rotation="${rotation}" 
-            scale="${scale}"
+            position="${positionStr}" 
+            rotation="${rotationStr}" 
+            scale="${scaleStr}"
           ></a-entity>`;
 
           case 'light':
             return `        <a-light 
             type="directional" 
-            position="${position}" 
+            position="${positionStr}" 
             intensity="${obj.content.intensity || 1}"
             color="${obj.content.color || '#ffffff'}"
           ></a-light>`;
@@ -577,9 +660,9 @@ export function generateMultipleImageExperienceHtml(experience) {
           case 'audio':
             return `        <a-entity 
               id="audio-entity-${assetId}"
-              position="${position}" 
-              rotation="${rotation}" 
-              scale="${scale}"
+              position="${positionStr}" 
+              rotation="${rotationStr}" 
+              scale="${scaleStr}"
               visible="false"
               data-audio-id="${assetId}"
             ></a-entity>`;
@@ -676,7 +759,14 @@ ${entities}
         ${allAssets.join('\n        ')}
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse"></a-camera>
+      <a-camera 
+        position="0 0 0" 
+        look-controls="enabled: false" 
+        cursor="fuse: false; rayOrigin: mouse"
+        fov="80"
+        near="0.01"
+        far="1000"
+      ></a-camera>
 
 ${allTargets.join('\n\n')}
     </a-scene>
