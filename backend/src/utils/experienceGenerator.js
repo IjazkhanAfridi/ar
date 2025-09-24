@@ -22,10 +22,10 @@ const __dirname = path.dirname(__filename);
 // These defaults aim to fix reported issues where media appeared far above
 // (because 1 unit = 1 meter in A-Frame) and with an unexpected angle.
 // Adjust in a .env file if needed and regenerate HTML (see regenerate-html.js).
-const POSITION_SCALE = parseFloat(process.env.AR_POSITION_SCALE || '0.5');
-const FLATTEN_IMAGES = (process.env.AR_FLATTEN_IMAGES || 'false').toLowerCase() === 'true';
-const IMAGE_Z_OFFSET = parseFloat(process.env.AR_IMAGE_Z_OFFSET || '0.3');
-const AUTO_FIX_ROT_X = (process.env.AR_AUTO_FIX_ROT_X || 'false').toLowerCase() === 'true';
+const POSITION_SCALE = parseFloat(process.env.AR_POSITION_SCALE || '0.1');
+const FLATTEN_IMAGES = (process.env.AR_FLATTEN_IMAGES || 'true').toLowerCase() === 'true';
+const IMAGE_Z_OFFSET = parseFloat(process.env.AR_IMAGE_Z_OFFSET || '0.01');
+const AUTO_FIX_ROT_X = (process.env.AR_AUTO_FIX_ROT_X || 'true').toLowerCase() === 'true';
 
 function transformPlacement(obj) {
   // Original values (assume numbers)
@@ -37,11 +37,35 @@ function transformPlacement(obj) {
   y *= POSITION_SCALE;
   z *= POSITION_SCALE;
 
-  // For TOP-DOWN view (looking DOWN at cup from ABOVE)
-  // POSITIVE 90 degrees to look down from top, not up from bottom
-  rx = 90;  // POSITIVE 90 degrees on X-axis for proper top-down view
-  ry = 0;   // No Y rotation
-  rz = 0;   // No Z rotation
+  const isMedia = obj.content && ['image', 'video'].includes(obj.content.type);
+  const isModel = obj.content && obj.content.type === '3d_model';
+
+  // For TOP-DOWN "sky to earth" view - objects should appear correctly when viewed from above
+  if (isMedia) {
+    // Images and videos should lay flat on the marker plane, facing upward
+    // -90 degrees on X-axis makes them lie flat and face up toward the camera
+    rx = -90;
+    ry = 0;
+    rz = 0;
+    
+    // Position slightly above the marker to avoid z-fighting
+    if (Math.abs(z) < 0.001) {
+      z = IMAGE_Z_OFFSET;
+    }
+  } else if (isModel) {
+    // Models: keep their original rotation or minimal adjustment
+    // Most 3D models are designed to be viewed from standard angles
+    // Only adjust if all rotations are zero (likely default/unset)
+    if (Math.abs(rx) < 0.001 && Math.abs(ry) < 0.001 && Math.abs(rz) < 0.001) {
+      rx = 0;  // Keep models upright for top-down view
+      ry = 0;
+      rz = 0;
+    }
+    // Otherwise preserve the user's intended rotation
+  } else {
+    // For other content types (lights, audio, etc.), preserve original rotation
+    // or apply minimal adjustment if needed
+  }
 
   // Ensure objects are positioned properly on the marker plane
   if (Math.abs(y) < 0.001) {
@@ -536,40 +560,38 @@ export function generateMultipleImageExperienceHtml(experience) {
     const entities = target.sceneObjects
       .map((obj) => {
         const assetId = `target-${targetIndex}-asset-${obj.id}`;
-        const position = `${obj.position.x} ${obj.position.y} ${obj.position.z}`;
-        const rotation = `${obj.rotation.x} ${obj.rotation.y} ${obj.rotation.z}`;
-        const scale = `${obj.scale.x} ${obj.scale.y} ${obj.scale.z}`;
+        const { positionStr, rotationStr, scaleStr } = transformPlacement(obj);
 
         switch (obj.content.type) {
           case 'image':
             return `        <a-image 
             src="#${assetId}" 
-            position="${position}" 
-            rotation="${rotation}" 
-            scale="${scale}"
+            position="${positionStr}" 
+            rotation="${rotationStr}" 
+            scale="${scaleStr}"
           ></a-image>`;
 
           case 'video':
             return `        <a-video 
             src="#${assetId}" 
-            position="${position}" 
-            rotation="${rotation}" 
-            scale="${scale}"
+            position="${positionStr}" 
+            rotation="${rotationStr}" 
+            scale="${scaleStr}"
             autoplay="true"
           ></a-video>`;
 
           case 'model':
             return `        <a-entity 
             gltf-model="#${assetId}" 
-            position="${position}" 
-            rotation="${rotation}" 
-            scale="${scale}"
+            position="${positionStr}" 
+            rotation="${rotationStr}" 
+            scale="${scaleStr}"
           ></a-entity>`;
 
           case 'light':
             return `        <a-light 
             type="directional" 
-            position="${position}" 
+            position="${positionStr}" 
             intensity="${obj.content.intensity || 1}"
             color="${obj.content.color || '#ffffff'}"
           ></a-light>`;
@@ -577,9 +599,9 @@ export function generateMultipleImageExperienceHtml(experience) {
           case 'audio':
             return `        <a-entity 
               id="audio-entity-${assetId}"
-              position="${position}" 
-              rotation="${rotation}" 
-              scale="${scale}"
+              position="${positionStr}" 
+              rotation="${rotationStr}" 
+              scale="${scaleStr}"
               visible="false"
               data-audio-id="${assetId}"
             ></a-entity>`;
