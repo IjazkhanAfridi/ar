@@ -293,6 +293,7 @@ export default function EditExperience() {
             onMindFileUpload={handleMindFileUpload}
             onMarkerImageUpload={setMarkerImage}
             transformMode={transformMode}
+            onTransformModeChange={setTransformMode}
             uploadedMindFile={uploadedMindFile}
             form={form}
           />

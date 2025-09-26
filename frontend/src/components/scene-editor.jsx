@@ -98,6 +98,7 @@ export function SceneEditor({
   onMindFileUpload,
   onMarkerImageUpload,
   transformMode,
+  onTransformModeChange,
   uploadedMindFile,
   form,
 }) {
@@ -203,18 +204,56 @@ export function SceneEditor({
       camera,
       renderer.domElement
     );
+    
+    // Set initial properties for better visibility and functionality
+    transformControls.setMode('translate'); // Start with translate mode
+    transformControls.setSize(1.5); // Make controls larger for better visibility
+    transformControls.setSpace('world');
+    
+    // Ensure controls are visible and interactive
+    transformControls.visible = false; // Start hidden, show when object selected
+    transformControls.enabled = true;
+    
+    // Force material update
+    transformControls.traverse((child) => {
+      if (child.material) {
+        child.material.depthTest = false;
+        child.material.depthWrite = false;
+        child.renderOrder = 999;
+      }
+    });
+    
+    // Handle dragging events
     transformControls.addEventListener('dragging-changed', (event) => {
       orbitControls.enabled = !event.value;
+      console.log('Transform controls dragging:', event.value);
     });
 
+    // Handle object transformation changes
     transformControls.addEventListener('objectChange', () => {
       if (selectedObject) {
+        console.log('Object transformed:', {
+          position: selectedObject.position,
+          rotation: selectedObject.rotation, 
+          scale: selectedObject.scale
+        });
         updateSceneConfigOptimized();
       }
     });
 
+    // Handle mouse hover for better UX
+    transformControls.addEventListener('mouseDown', () => {
+      console.log('Transform controls mouse down');
+    });
+
+    transformControls.addEventListener('mouseUp', () => {
+      console.log('Transform controls mouse up');
+    });
+
     transformControlsRef.current = transformControls;
     scene.add(transformControls);
+    
+    console.log('Transform controls initialized and added to scene');
 
     // Add static lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -233,6 +272,8 @@ export function SceneEditor({
     // Add grid
     const gridHelper = new THREE.GridHelper(10, 10);
     scene.add(gridHelper);
+    
+    // Test cube removed - use dedicated debug pages for testing transform controls
 
     // Click handler
     const handleClick = (event) => {
@@ -249,41 +290,160 @@ export function SceneEditor({
         true
       );
 
-      const clickedObject = intersects.find(({ object }) => {
-        if (
-          object instanceof THREE.GridHelper ||
-          object.parent instanceof TransformControls
-        ) {
-          return false;
-        }
+      console.log('Intersects found:', intersects.length);
+      
+      // Filter out non-selectable objects
+      const validIntersects = intersects.filter(({ object }) => {
+        // Skip grid helper
+        if (object instanceof THREE.GridHelper) return false;
+        
+        // Skip transform controls
+        if (object.parent && object.parent.type === 'TransformControls') return false;
+        
+        // Check if object or its parent has selectable userData
         let current = object;
         while (current) {
-          if (current.userData.type === 'content') return true;
+          if (current.userData.type === 'content' || current.userData.selectable) {
+            return true;
+          }
           current = current.parent;
         }
         return false;
-      })?.object;
+      });
 
-      if (clickedObject) {
-        let targetObject = clickedObject;
-        while (targetObject.parent && !targetObject.userData.type) {
+      console.log('Valid intersects:', validIntersects.length);
+
+      if (validIntersects.length > 0) {
+        let targetObject = validIntersects[0].object;
+        
+        // Find the root selectable object
+        while (targetObject.parent && !targetObject.userData.type && !targetObject.userData.selectable) {
           targetObject = targetObject.parent;
         }
+        
+        console.log('🎯 Object selected:', targetObject.userData);
         setSelectedObject(targetObject);
-        transformControlsRef.current?.attach(targetObject);
-        transformControlsRef.current?.setMode(transformMode);
+        
+        // Add visual selection indicator
+        if (targetObject.material) {
+          // Store original emissive color
+          if (!targetObject.userData.originalEmissive) {
+            targetObject.userData.originalEmissive = targetObject.material.emissive.getHex();
+          }
+          // Set selection highlight
+          targetObject.material.emissive.setHex(0x444444);
+        }
+        
+        // Attach transform controls to the selected object
+        if (transformControlsRef.current) {
+          console.log('📎 Attaching transform controls...');
+          transformControlsRef.current.attach(targetObject);
+          transformControlsRef.current.setMode(transformMode || 'translate');
+          transformControlsRef.current.visible = true;
+          transformControlsRef.current.enabled = true;
+          
+          // Force update transform controls
+          transformControlsRef.current.updateMatrixWorld(true);
+          
+          console.log('✅ Transform controls attached to:', targetObject.userData.id || targetObject.userData.name, 'mode:', transformMode);
+          console.log('Transform controls object:', transformControlsRef.current.object === targetObject);
+          console.log('Transform controls visible:', transformControlsRef.current.visible);
+          console.log('Transform controls enabled:', transformControlsRef.current.enabled);
+        }
       } else {
+        console.log('🚫 No valid object selected, detaching controls');
+        
+        // Remove selection highlight from previously selected object
+        if (selectedObject && selectedObject.material && selectedObject.userData.originalEmissive !== undefined) {
+          selectedObject.material.emissive.setHex(selectedObject.userData.originalEmissive);
+        }
+        
         setSelectedObject(null);
-        transformControlsRef.current?.detach();
+        if (transformControlsRef.current) {
+          transformControlsRef.current.detach();
+          transformControlsRef.current.visible = false;
+        }
+      }
+    };
+
+    // Keyboard shortcuts handler
+    const handleKeyDown = (event) => {
+      if (!transformControlsRef.current) return;
+      
+      // Prevent default for our shortcuts
+      const key = event.key.toLowerCase();
+      
+      switch (key) {
+        case 'w':
+          event.preventDefault();
+          transformControlsRef.current.setMode('translate');
+          onTransformModeChange?.('translate');
+          break;
+        case 'e':
+          event.preventDefault();
+          transformControlsRef.current.setMode('rotate');
+          onTransformModeChange?.('rotate');
+          break;
+        case 'r':
+          event.preventDefault();
+          transformControlsRef.current.setMode('scale');
+          onTransformModeChange?.('scale');
+          break;
+        case 'q':
+          event.preventDefault();
+          transformControlsRef.current.setSpace(
+            transformControlsRef.current.space === 'local' ? 'world' : 'local'
+          );
+          break;
+        case 'x':
+          event.preventDefault();
+          transformControlsRef.current.showX = !transformControlsRef.current.showX;
+          break;
+        case 'y':
+          event.preventDefault();
+          transformControlsRef.current.showY = !transformControlsRef.current.showY;
+          break;
+        case 'z':
+          event.preventDefault();
+          transformControlsRef.current.showZ = !transformControlsRef.current.showZ;
+          break;
+        case ' ':
+          event.preventDefault();
+          transformControlsRef.current.enabled = !transformControlsRef.current.enabled;
+          break;
+        case 'escape':
+          event.preventDefault();
+          if (selectedObject) {
+            setSelectedObject(null);
+            transformControlsRef.current.detach();
+          }
+          break;
+        case '+':
+        case '=':
+          event.preventDefault();
+          transformControlsRef.current.setSize(transformControlsRef.current.size + 0.1);
+          break;
+        case '-':
+        case '_':
+          event.preventDefault();
+          transformControlsRef.current.setSize(Math.max(0.1, transformControlsRef.current.size - 0.1));
+          break;
       }
     };
 
     containerRef.current.addEventListener('click', handleClick);
+    document.addEventListener('keydown', handleKeyDown);
 
-    // Animation loop
+    // Animation loop with transform controls update
     const animate = () => {
       animationFrameRef.current = requestAnimationFrame(animate);
       orbitControls.update();
+      
+      // Ensure transform controls are rendered
+      if (transformControlsRef.current) {
+        transformControlsRef.current.updateMatrixWorld();
+      }
+      
       renderer.render(scene, camera);
     };
     animate();
@@ -347,6 +507,7 @@ export function SceneEditor({
 
       window.removeEventListener('resize', handleResize);
       containerRef.current?.removeEventListener('click', handleClick);
+      document.removeEventListener('keydown', handleKeyDown);
 
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
@@ -375,7 +536,10 @@ export function SceneEditor({
 
   useEffect(() => {
     if (transformControlsRef.current && selectedObject) {
+      console.log('Updating transform mode to:', transformMode);
       transformControlsRef.current.setMode(transformMode);
+      transformControlsRef.current.visible = true;
+      transformControlsRef.current.enabled = true;
     }
   }, [transformMode, selectedObject]);
 
@@ -474,23 +638,62 @@ export function SceneEditor({
     setLoadedObjectIds(currentIds);
   }, [sceneObjectsIds, isSceneInitialized]);
 
-  // Optimized config update function
+  // Optimized config update function with real-time feedback
   const updateSceneConfigOptimized = useCallback(() => {
     if (!selectedObject) return;
 
-    const updatedConfig = {
-      ...config,
-      sceneObjects: sceneObjects.map((obj) => ({
+    // Update the object's internal config
+    if (selectedObject.userData.config) {
+      selectedObject.userData.config.position = {
+        x: selectedObject.position.x,
+        y: selectedObject.position.y,
+        z: selectedObject.position.z
+      };
+      selectedObject.userData.config.rotation = {
+        x: selectedObject.rotation.x,
+        y: selectedObject.rotation.y,
+        z: selectedObject.rotation.z
+      };
+      selectedObject.userData.config.scale = {
+        x: selectedObject.scale.x,
+        y: selectedObject.scale.y,
+        z: selectedObject.scale.z
+      };
+    }
+
+    // Update the global config
+    const updatedSceneObjects = sceneObjects.map((obj) => {
+      if (obj.userData.id === selectedObject.userData.id) {
+        return {
+          id: obj.userData.id,
+          position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
+          rotation: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z },
+          scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z },
+          content: obj.userData.config?.content || obj.userData.config,
+        };
+      }
+      return {
         id: obj.userData.id,
         position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
         rotation: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z },
         scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z },
-        content: obj.userData.config.content,
-      })),
+        content: obj.userData.config?.content || obj.userData.config,
+      };
+    });
+
+    const updatedConfig = {
+      ...config,
+      sceneObjects: updatedSceneObjects,
     };
 
     onChange(updatedConfig);
     form.setValue('contentConfig', updatedConfig);
+    
+    console.log('Config updated for object:', selectedObject.userData.id, {
+      position: selectedObject.position,
+      rotation: selectedObject.rotation,
+      scale: selectedObject.scale
+    });
   }, [selectedObject, sceneObjects, config, onChange, form]);
 
   const recreateSceneObject = useCallback(async (sceneObjectConfig) => {
@@ -813,8 +1016,15 @@ export function SceneEditor({
           });
 
           setSelectedObject(sceneObject);
-          transformControlsRef.current?.attach(sceneObject);
-          transformControlsRef.current?.setMode(transformMode);
+          
+          // Immediately attach transform controls to new object
+          if (transformControlsRef.current) {
+            transformControlsRef.current.attach(sceneObject);
+            transformControlsRef.current.setMode(transformMode);
+            transformControlsRef.current.visible = true;
+            transformControlsRef.current.enabled = true;
+            console.log('Transform controls auto-attached to new object:', sceneObject.userData.id);
+          }
 
           const updatedConfig = {
             ...config,
@@ -1230,7 +1440,7 @@ export function SceneEditor({
       </div>
 
       {/* Center - 3D Scene Viewer */}
-      <div className='flex-1 bg-slate-800 h-full'>
+      <div className='flex-1 bg-slate-800 h-full relative'>
         <div
           ref={containerRef}
           className='w-full h-full bg-slate-800 relative'
@@ -1240,6 +1450,44 @@ export function SceneEditor({
             minHeight: '500px',
           }}
         />
+        
+        {/* Keyboard Shortcuts Help Panel */}
+        <div className='absolute top-4 left-4 bg-black/80 text-white p-4 rounded-lg text-sm font-mono z-10'>
+          <div className='mb-2 font-bold text-blue-400'>Transform Controls:</div>
+          <div className='space-y-1'>
+            <div className={`${transformMode === 'translate' ? 'text-green-400' : 'text-gray-300'}`}>
+              <span className='text-yellow-400'>W</span> - Translate (Move)
+            </div>
+            <div className={`${transformMode === 'rotate' ? 'text-green-400' : 'text-gray-300'}`}>
+              <span className='text-yellow-400'>E</span> - Rotate
+            </div>
+            <div className={`${transformMode === 'scale' ? 'text-green-400' : 'text-gray-300'}`}>
+              <span className='text-yellow-400'>R</span> - Scale
+            </div>
+          </div>
+          <div className='mt-3 pt-2 border-t border-gray-600'>
+            <div className='space-y-1 text-xs'>
+              <div><span className='text-yellow-400'>Q</span> - Toggle World/Local</div>
+              <div><span className='text-yellow-400'>X/Y/Z</span> - Toggle Axis</div>
+              <div><span className='text-yellow-400'>Space</span> - Toggle Controls</div>
+              <div><span className='text-yellow-400'>Esc</span> - Deselect</div>
+              <div><span className='text-yellow-400'>+/-</span> - Resize Controls</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Current Mode Indicator */}
+        {selectedObject && (
+          <div className='absolute top-4 right-4 bg-blue-600/90 text-white px-4 py-2 rounded-lg font-semibold z-10'>
+            <div className='flex items-center gap-2'>
+              <div className='w-2 h-2 bg-green-400 rounded-full animate-pulse'></div>
+              <span>Selected: {selectedObject.userData.contentType}</span>
+            </div>
+            <div className='text-sm mt-1'>
+              Mode: {transformMode.charAt(0).toUpperCase() + transformMode.slice(1)}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Right Sidebar - Transform Controls */}
@@ -1250,14 +1498,18 @@ export function SceneEditor({
             <div className='grid grid-cols-2 gap-2 mb-4'>
               <Button
                 variant={
-                  activeControlPanel === 'position' ? 'default' : 'outline'
+                  transformMode === 'translate' ? 'default' : 'outline'
                 }
                 size='sm'
-                onClick={() =>
+                onClick={() => {
+                  onTransformModeChange?.('translate');
+                  if (transformControlsRef.current) {
+                    transformControlsRef.current.setMode('translate');
+                  }
                   setActiveControlPanel((prev) =>
                     prev === 'position' ? null : 'position'
-                  )
-                }
+                  );
+                }}
                 className='flex items-center gap-2'
               >
                 <Move className='h-4 w-4' />
@@ -1265,27 +1517,35 @@ export function SceneEditor({
               </Button>
               <Button
                 variant={
-                  activeControlPanel === 'rotation' ? 'default' : 'outline'
+                  transformMode === 'rotate' ? 'default' : 'outline'
                 }
                 size='sm'
-                onClick={() =>
+                onClick={() => {
+                  onTransformModeChange?.('rotate');
+                  if (transformControlsRef.current) {
+                    transformControlsRef.current.setMode('rotate');
+                  }
                   setActiveControlPanel((prev) =>
                     prev === 'rotation' ? null : 'rotation'
-                  )
-                }
+                  );
+                }}
                 className='flex items-center gap-2'
               >
                 <RotateCw className='h-4 w-4' />
                 <span className='text-xs'>Rotate</span>
               </Button>
               <Button
-                variant={activeControlPanel === 'scale' ? 'default' : 'outline'}
+                variant={transformMode === 'scale' ? 'default' : 'outline'}
                 size='sm'
-                onClick={() =>
+                onClick={() => {
+                  onTransformModeChange?.('scale');
+                  if (transformControlsRef.current) {
+                    transformControlsRef.current.setMode('scale');
+                  }
                   setActiveControlPanel((prev) =>
                     prev === 'scale' ? null : 'scale'
-                  )
-                }
+                  );
+                }}
                 className='flex items-center gap-2'
               >
                 <Maximize className='h-4 w-4' />
@@ -1326,8 +1586,15 @@ export function SceneEditor({
                       : 'bg-slate-700 hover:bg-slate-600'
                   }`}
                   onClick={() => {
+                    console.log('Sidebar object clicked:', object.userData.id);
                     setSelectedObject(object);
-                    transformControlsRef.current?.attach(object);
+                    if (transformControlsRef.current) {
+                      transformControlsRef.current.attach(object);
+                      transformControlsRef.current.setMode(transformMode);
+                      transformControlsRef.current.visible = true;
+                      transformControlsRef.current.enabled = true;
+                      console.log('Transform controls attached from sidebar');
+                    }
                   }}
                 >
                   <div className='flex items-center gap-3'>
