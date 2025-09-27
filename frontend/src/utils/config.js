@@ -1,6 +1,20 @@
 // API configuration
-export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const getApiBaseUrl = () => {
+  // Check for environment variable first
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  
+  // In production without env var, use same domain
+  if (import.meta.env.PROD) {
+    return window.location.origin;
+  }
+  
+  // In development, use localhost
+  return 'http://localhost:5000';
+};
+
+export const API_BASE_URL = getApiBaseUrl();
 
 // Helper function to build API URLs
 export const buildApiUrl = (path) => {
