@@ -77,22 +77,30 @@
         <img id="asset-obj_1756488621505_6485ntd" src="/uploads/1756488621384-my-image.jpg" crossorigin="anonymous" />
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse"></a-camera>
+      <a-camera 
+        position="0 0 0" 
+        look-controls="enabled: false" 
+        cursor="fuse: false; rayOrigin: mouse"
+        fov="80"
+        near="0.01"
+        far="1000"
+      ></a-camera>
 
       <a-entity mindar-image-target="targetIndex: 0">
                 <a-entity 
           gltf-model="#asset-obj_1756488119104_fkuvnpd" 
-          position="-0.11000000000000001 0.06798083780184958 -0.029625822301824135" 
-          rotation="-90 0 0" 
-          scale="0.5 0.5 0.5"
+          position="-0.330 0.214 -0.089" 
+          rotation="90.0 0.0 0.0" 
+          scale="0.300 0.300 0.300"
         ></a-entity>
         <a-image 
           src="#asset-obj_1756488621505_6485ntd" 
-          position="0 0.1 0" 
-          rotation="90 0 0" 
-          scale="1 1 1"
+          position="0.000 0.310 0.000" 
+          rotation="90.0 0.0 0.0" 
+          scale="0.600 0.600 0.600"
           side="double"
           crossorigin="anonymous"
+          material="transparent: true; alphaTest: 0.1"
         ></a-image>
       </a-entity>
     </a-scene>

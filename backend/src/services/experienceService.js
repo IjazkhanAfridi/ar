@@ -1,4 +1,4 @@
-import { db } from '../config/database.js';
+import { db } from '../config/mysql-database.js';
 import {
   experiences,
   contentFiles,
@@ -6,7 +6,7 @@ import {
   imagesLibrary,
   videosLibrary,
   audioLibrary,
-} from '../models/schema.js';
+} from '../models/mysql-schema.js';
 import { eq, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { fileService } from './fileService.js';
@@ -32,12 +32,32 @@ class ExperienceService {
       updatedAt: new Date(),
     };
 
-    const [experience] = await db
-      .insert(experiences)
-      .values(newExperience)
-      .returning();
+    try {
+      const result = await db.insert(experiences).values(newExperience);
+      console.log('Insert result:', result);
+      
+      const insertId = result[0]?.insertId || result.insertId;
+      if (!insertId) {
+        throw new Error('Failed to get insertId from database');
+      }
+      
+      // Fetch the created experience using the auto-generated ID
+      const [experience] = await db
+        .select()
+        .from(experiences)
+        .where(eq(experiences.id, insertId));
 
-    return experience;
+      console.log('Created experience:', experience);
+      
+      if (!experience) {
+        throw new Error('Failed to fetch created experience');
+      }
+
+      return experience;
+    } catch (error) {
+      console.error('Error in createExperience:', error);
+      throw error;
+    }
   }
 
   /**
@@ -128,11 +148,16 @@ class ExperienceService {
       updatedAt: new Date(),
     };
 
-    const [updatedExperience] = await db
+    await db
       .update(experiences)
       .set(updateFields)
-      .where(eq(experiences.id, id))
-      .returning();
+      .where(eq(experiences.id, id));
+
+    // Fetch the updated experience
+    const [updatedExperience] = await db
+      .select()
+      .from(experiences)
+      .where(eq(experiences.id, id));
 
     return updatedExperience;
   }
@@ -155,10 +180,9 @@ class ExperienceService {
     await this.deleteExperienceFiles(id);
 
     // Delete experience
-    const [deletedExperience] = await db
+    await db
       .delete(experiences)
-      .where(eq(experiences.id, id))
-      .returning();
+      .where(eq(experiences.id, id));
 
     return { message: 'Experience deleted successfully' };
   }
@@ -188,10 +212,20 @@ class ExperienceService {
       uploadedAt: new Date().toISOString(),
     };
 
-    const [savedFile] = await db
+    const result = await db
       .insert(contentFiles)
-      .values(contentFile)
-      .returning();
+      .values(contentFile);
+
+    const insertId = result[0]?.insertId || result.insertId;
+    if (!insertId) {
+      throw new Error('Failed to get insertId from contentFiles insert');
+    }
+
+    // Fetch the created file using the auto-generated ID
+    const [savedFile] = await db
+      .select()
+      .from(contentFiles)
+      .where(eq(contentFiles.id, insertId));
 
     return savedFile;
   }
@@ -253,14 +287,19 @@ class ExperienceService {
     }
 
     // Update with new marker image
-    const [updatedExperience] = await db
+    await db
       .update(experiences)
       .set({
         markerImage: markerImagePath,
         updatedAt: new Date(),
       })
-      .where(eq(experiences.id, experienceId))
-      .returning();
+      .where(eq(experiences.id, experienceId));
+
+    // Fetch the updated experience
+    const [updatedExperience] = await db
+      .select()
+      .from(experiences)
+      .where(eq(experiences.id, experienceId));
 
     return updatedExperience;
   }
@@ -285,14 +324,19 @@ class ExperienceService {
       const mindFileUrl = `/uploads/mind-files/${filename}`;
 
       // Update experience with mind file path
-      const [updatedExperience] = await db
+      await db
         .update(experiences)
         .set({
           mindFile: mindFileUrl,
           updatedAt: new Date(),
         })
-        .where(eq(experiences.id, experienceId))
-        .returning();
+        .where(eq(experiences.id, experienceId));
+
+      // Fetch the updated experience
+      const [updatedExperience] = await db
+        .select()
+        .from(experiences)
+        .where(eq(experiences.id, experienceId));
 
       return updatedExperience;
     } catch (error) {
@@ -338,7 +382,21 @@ class ExperienceService {
     }
 
     try {
-      const experienceUrl = saveExperienceHtml(experience);
+      // Parse JSON strings if they exist
+      const processedExperience = {
+        ...experience,
+        contentConfig: typeof experience.contentConfig === 'string' 
+          ? JSON.parse(experience.contentConfig) 
+          : experience.contentConfig,
+        markerDimensions: typeof experience.markerDimensions === 'string'
+          ? JSON.parse(experience.markerDimensions)
+          : experience.markerDimensions,
+        targetsConfig: experience.targetsConfig && typeof experience.targetsConfig === 'string'
+          ? JSON.parse(experience.targetsConfig)
+          : experience.targetsConfig
+      };
+
+      const experienceUrl = saveExperienceHtml(processedExperience);
       return experienceUrl;
     } catch (error) {
       console.error('Error generating experience HTML:', error);
@@ -356,7 +414,21 @@ class ExperienceService {
     }
 
     try {
-      const experienceUrl = saveMultipleImageExperienceHtml(experience);
+      // Parse JSON strings if they exist
+      const processedExperience = {
+        ...experience,
+        contentConfig: typeof experience.contentConfig === 'string' 
+          ? JSON.parse(experience.contentConfig) 
+          : experience.contentConfig,
+        markerDimensions: typeof experience.markerDimensions === 'string'
+          ? JSON.parse(experience.markerDimensions)
+          : experience.markerDimensions,
+        targetsConfig: experience.targetsConfig && typeof experience.targetsConfig === 'string'
+          ? JSON.parse(experience.targetsConfig)
+          : experience.targetsConfig
+      };
+
+      const experienceUrl = saveMultipleImageExperienceHtml(processedExperience);
       return experienceUrl;
     } catch (error) {
       console.error('Error generating multiple image experience HTML:', error);
@@ -370,14 +442,24 @@ class ExperienceService {
 
   // Models Library
   async saveModel(modelData) {
-    const [model] = await db
+    const result = await db
       .insert(modelsLibrary)
       .values({
         ...modelData,
         createdAt: new Date(),
         updatedAt: new Date(),
-      })
-      .returning();
+      });
+
+    const insertId = result[0]?.insertId || result.insertId;
+    if (!insertId) {
+      throw new Error('Failed to get insertId from modelsLibrary insert');
+    }
+
+    // Fetch the created model using the auto-generated ID
+    const [model] = await db
+      .select()
+      .from(modelsLibrary)
+      .where(eq(modelsLibrary.id, insertId));
 
     return model;
   }
@@ -393,32 +475,47 @@ class ExperienceService {
   }
 
   async deleteModel(id) {
-    const [deletedModel] = await db
-      .delete(modelsLibrary)
-      .where(eq(modelsLibrary.id, id))
-      .returning();
+    // Get model data before deletion for file cleanup
+    const [modelToDelete] = await db
+      .select()
+      .from(modelsLibrary)
+      .where(eq(modelsLibrary.id, id));
 
-    if (deletedModel && deletedModel.fileUrl) {
+    await db
+      .delete(modelsLibrary)
+      .where(eq(modelsLibrary.id, id));
+
+    if (modelToDelete && modelToDelete.fileUrl) {
       try {
-        await fileService.deleteFile(deletedModel.fileUrl);
+        await fileService.deleteFile(modelToDelete.fileUrl);
       } catch (error) {
         console.error('Failed to delete model file:', error);
       }
     }
 
-    return deletedModel;
+    return modelToDelete;
   }
 
   // Images Library
   async saveImage(imageData) {
-    const [image] = await db
+    const result = await db
       .insert(imagesLibrary)
       .values({
         ...imageData,
         createdAt: new Date(),
         updatedAt: new Date(),
-      })
-      .returning();
+      });
+
+    const insertId = result[0]?.insertId || result.insertId;
+    if (!insertId) {
+      throw new Error('Failed to get insertId from imagesLibrary insert');
+    }
+
+    // Fetch the created image using the auto-generated ID
+    const [image] = await db
+      .select()
+      .from(imagesLibrary)
+      .where(eq(imagesLibrary.id, insertId));
 
     return image;
   }
@@ -434,32 +531,47 @@ class ExperienceService {
   }
 
   async deleteImage(id) {
-    const [deletedImage] = await db
-      .delete(imagesLibrary)
-      .where(eq(imagesLibrary.id, id))
-      .returning();
+    // Get image data before deletion for file cleanup
+    const [imageToDelete] = await db
+      .select()
+      .from(imagesLibrary)
+      .where(eq(imagesLibrary.id, id));
 
-    if (deletedImage && deletedImage.fileUrl) {
+    await db
+      .delete(imagesLibrary)
+      .where(eq(imagesLibrary.id, id));
+
+    if (imageToDelete && imageToDelete.fileUrl) {
       try {
-        await fileService.deleteFile(deletedImage.fileUrl);
+        await fileService.deleteFile(imageToDelete.fileUrl);
       } catch (error) {
         console.error('Failed to delete image file:', error);
       }
     }
 
-    return deletedImage;
+    return imageToDelete;
   }
 
   // Videos Library
   async saveVideo(videoData) {
-    const [video] = await db
+    const result = await db
       .insert(videosLibrary)
       .values({
         ...videoData,
         createdAt: new Date(),
         updatedAt: new Date(),
-      })
-      .returning();
+      });
+
+    const insertId = result[0]?.insertId || result.insertId;
+    if (!insertId) {
+      throw new Error('Failed to get insertId from videosLibrary insert');
+    }
+
+    // Fetch the created video using the auto-generated ID
+    const [video] = await db
+      .select()
+      .from(videosLibrary)
+      .where(eq(videosLibrary.id, insertId));
 
     return video;
   }
@@ -475,32 +587,47 @@ class ExperienceService {
   }
 
   async deleteVideo(id) {
-    const [deletedVideo] = await db
-      .delete(videosLibrary)
-      .where(eq(videosLibrary.id, id))
-      .returning();
+    // Get video data before deletion for file cleanup
+    const [videoToDelete] = await db
+      .select()
+      .from(videosLibrary)
+      .where(eq(videosLibrary.id, id));
 
-    if (deletedVideo && deletedVideo.fileUrl) {
+    await db
+      .delete(videosLibrary)
+      .where(eq(videosLibrary.id, id));
+
+    if (videoToDelete && videoToDelete.fileUrl) {
       try {
-        await fileService.deleteFile(deletedVideo.fileUrl);
+        await fileService.deleteFile(videoToDelete.fileUrl);
       } catch (error) {
         console.error('Failed to delete video file:', error);
       }
     }
 
-    return deletedVideo;
+    return videoToDelete;
   }
 
   // Audios Library
   async saveAudio(audioData) {
-    const [audio] = await db
+    const result = await db
       .insert(audioLibrary)
       .values({
         ...audioData,
         createdAt: new Date(),
         updatedAt: new Date(),
-      })
-      .returning();
+      });
+
+    const insertId = result[0]?.insertId || result.insertId;
+    if (!insertId) {
+      throw new Error('Failed to get insertId from audioLibrary insert');
+    }
+
+    // Fetch the created audio using the auto-generated ID
+    const [audio] = await db
+      .select()
+      .from(audioLibrary)
+      .where(eq(audioLibrary.id, insertId));
 
     return audio;
   }
@@ -516,20 +643,25 @@ class ExperienceService {
   }
 
   async deleteAudio(id) {
-    const [deletedAudio] = await db
-      .delete(audioLibrary)
-      .where(eq(audioLibrary.id, id))
-      .returning();
+    // Get audio data before deletion for file cleanup
+    const [audioToDelete] = await db
+      .select()
+      .from(audioLibrary)
+      .where(eq(audioLibrary.id, id));
 
-    if (deletedAudio && deletedAudio.fileUrl) {
+    await db
+      .delete(audioLibrary)
+      .where(eq(audioLibrary.id, id));
+
+    if (audioToDelete && audioToDelete.fileUrl) {
       try {
-        await fileService.deleteFile(deletedAudio.fileUrl);
+        await fileService.deleteFile(audioToDelete.fileUrl);
       } catch (error) {
         console.error('Failed to delete audio file:', error);
       }
     }
 
-    return deletedAudio;
+    return audioToDelete;
   }
 }
 

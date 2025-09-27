@@ -76,14 +76,21 @@
         <a-asset-item id="asset-1758398245462js9knvl9w" src="/uploads/1758398245338-Terracotta_Harmony_0516102104_texture.glb"></a-asset-item>
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse"></a-camera>
+      <a-camera 
+        position="0 0 0" 
+        look-controls="enabled: false" 
+        cursor="fuse: false; rayOrigin: mouse"
+        fov="80"
+        near="0.01"
+        far="1000"
+      ></a-camera>
 
       <a-entity mindar-image-target="targetIndex: 0">
                 <a-entity 
           gltf-model="#asset-1758398245462js9knvl9w" 
-          position="0.0172 0.0296 0" 
-          rotation="-90 0 0" 
-          scale="0.388 0.388 0.388"
+          position="0.052 0.099 0.000" 
+          rotation="90.0 0.0 0.0" 
+          scale="0.233 0.233 0.233"
         ></a-entity>
       </a-entity>
     </a-scene>

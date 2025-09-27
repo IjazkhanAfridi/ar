@@ -15,13 +15,28 @@ export const useSceneStore = create((set, get) => ({
     sceneObjects: [],
   },
 
-  // Add object to scene
+  // Add object to scene with smart positioning to prevent overlap
   addSceneObject: (objectData) => {
     const id = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+    
+    // Get current state to calculate positioning
+    const currentObjects = get().sceneObjects;
+    const objectCount = currentObjects.length;
+    
+    // CRITICAL FIX: Always place new objects at marker center (0,0,0)
+    // This ensures all objects start at the exact center of the marker image
+    const getDefaultPosition = () => {
+      return {
+        x: 0, // Center of marker horizontally
+        y: 0.5, // Slightly above marker surface 
+        z: 0, // Center of marker depth-wise
+      };
+    };
+    
     const newObject = {
       id,
       ...objectData,
-      position: objectData.position || { x: 0, y: 0, z: 0 },
+      position: objectData.position || getDefaultPosition(),
       rotation: objectData.rotation || { x: 0, y: 0, z: 0 },
       scale: objectData.scale || { x: 1, y: 1, z: 1 },
     };

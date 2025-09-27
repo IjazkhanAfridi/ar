@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <title>AR Experience - Top-Down View Test</title>
+    <title>AR Experience - dfvgbhnjbgbg</title>
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     <style>
@@ -68,14 +68,14 @@
     </div>
     
     <a-scene
-      mindar-image="imageTargetSrc: /uploads/mind-files/test.mind; filterMinCF:0.0001; filterBeta: 0.01; showStats: false"
+      mindar-image="imageTargetSrc: /uploads/mind-files/experience_65.mind; filterMinCF:0.0001; filterBeta: 0.01; showStats: false"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
     >
       <a-assets>
-        <img id="asset-test-image-1" src="/uploads/test-image.jpg" crossorigin="anonymous" />
-        <video id="asset-test-video-1" src="/uploads/test-video.mp4" loop crossorigin="anonymous" preload="auto"></video>
-        <a-asset-item id="asset-test-model-1" src="/uploads/test-model.glb"></a-asset-item>
+        <a-asset-item id="asset-1758743722902l59de39k0" src="/uploads/1758743722783-Terracotta_Harmony_0516102104_texture.glb"></a-asset-item>
+        <img id="asset-1758743738957lm5zseb39" src="/uploads/1758743738791-my-image.jpg" crossorigin="anonymous" />
+        <video id="asset-1758743762677mfbm42dg0" src="/uploads/1758743762539-856787-hd_1920_1080_30fps.mp4" loop crossorigin="anonymous" preload="auto"></video>
       </a-assets>
 
       <a-camera 
@@ -88,37 +88,34 @@
       ></a-camera>
 
       <a-entity mindar-image-target="targetIndex: 0">
-                <a-image 
-          src="#asset-test-image-1" 
-          position="-0.050 0.020 0.000" 
-          rotation="-90.0 0.0 0.0" 
-          scale="0.800 0.800 0.800"
+                <a-entity 
+          gltf-model="#asset-1758743722902l59de39k0" 
+          position="-0.353 0.055 0.160" 
+          rotation="90.0 0.0 0.0" 
+          scale="0.156 0.104 0.104"
+        ></a-entity>
+        <a-image 
+          src="#asset-1758743738957lm5zseb39" 
+          position="0.153 0.128 0.224" 
+          rotation="90.0 0.0 0.0" 
+          scale="0.337 0.337 0.337"
           side="double"
           crossorigin="anonymous"
+          material="transparent: true; alphaTest: 0.1"
         ></a-image>
         <a-video 
-          src="#asset-test-video-1" 
-          position="0.050 0.020 0.000" 
-          rotation="-90.0 0.0 0.0" 
+          src="#asset-1758743762677mfbm42dg0" 
+          position="-0.174 0.070 -0.161" 
+          rotation="90.0 0.0 0.0" 
           scale="0.600 0.600 0.600"
-          autoplay="true"
-          data-video-id="asset-test-video-1"
+          autoplay="false"
+          loop="true"
+          data-video-id="asset-1758743762677mfbm42dg0"
           crossorigin="anonymous"
           playsinline
           webkit-playsinline
+          material="transparent: true"
         ></a-video>
-        <a-entity 
-          gltf-model="#asset-test-model-1" 
-          position="0.000 0.020 0.050" 
-          rotation="0.0 0.0 0.0" 
-          scale="0.500 0.500 0.500"
-        ></a-entity>
-        <a-light 
-          type="directional" 
-          position="0.000 1.000 0.000" 
-          intensity="0.8"
-          color="#ffffff"
-        ></a-light>
       </a-entity>
     </a-scene>
 

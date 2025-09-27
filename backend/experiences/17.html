@@ -76,15 +76,21 @@
         <img id="target-0-asset-obj_test_123" src="/uploads/test-image.jpg" crossorigin="anonymous" />
       </a-assets>
 
-  <!-- Top-down camera: rotate 90deg on X to look downward while keeping position at origin -->
-  <a-camera position="0 0 0" rotation="90 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse"></a-camera>
+      <a-camera 
+        position="0 0 0" 
+        look-controls="enabled: false" 
+        cursor="fuse: false; rayOrigin: mouse"
+        fov="80"
+        near="0.01"
+        far="1000"
+      ></a-camera>
 
       <a-entity mindar-image-target="targetIndex: 0">
         <a-image 
             src="#target-0-asset-obj_test_123" 
-            position="0.1 1 0" 
-            rotation="90 0 0" 
-            scale="1 1 1"
+            position="0.300 0.310 0.000" 
+            rotation="90.0 0.0 0.0" 
+            scale="0.600 0.600 0.600"
             side="double"
             crossorigin="anonymous"
           ></a-image>

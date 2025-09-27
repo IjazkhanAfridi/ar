@@ -1,5 +1,5 @@
-import { db } from '../config/database.js';
-import { users } from '../models/schema.js';
+import { db } from '../config/mysql-database.js';
+import { users } from '../models/mysql-schema.js';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
 import { nanoid } from 'nanoid';
@@ -32,7 +32,10 @@ class UserService {
       updatedAt: new Date(),
     };
 
-    const [user] = await db.insert(users).values(newUser).returning();
+    await db.insert(users).values(newUser);
+    
+    // Fetch the created user
+    const [user] = await db.select().from(users).where(eq(users.id, newUser.id));
     
     // Remove password from response
     const { password: _, ...userWithoutPassword } = user;
@@ -86,12 +89,14 @@ class UserService {
       updateFields.password = await bcrypt.hash(updateData.password, 12);
     }
 
-    const [updatedUser] = await db
+    await db
       .update(users)
       .set(updateFields)
-      .where(eq(users.id, id))
-      .returning();
+      .where(eq(users.id, id));
 
+    // Fetch the updated user
+    const [updatedUser] = await db.select().from(users).where(eq(users.id, id));
+    
     if (!updatedUser) {
       throw new Error('User not found');
     }
@@ -105,15 +110,17 @@ class UserService {
    * Update user status (activate/deactivate)
    */
   async updateUserStatus(id, isActive) {
-    const [updatedUser] = await db
+    await db
       .update(users)
       .set({ 
         isActive, 
         updatedAt: new Date() 
       })
-      .where(eq(users.id, id))
-      .returning();
+      .where(eq(users.id, id));
 
+    // Fetch the updated user
+    const [updatedUser] = await db.select().from(users).where(eq(users.id, id));
+    
     if (!updatedUser) {
       throw new Error('User not found');
     }
@@ -126,14 +133,14 @@ class UserService {
    * Delete user
    */
   async deleteUser(id) {
-    const [deletedUser] = await db
-      .delete(users)
-      .where(eq(users.id, id))
-      .returning();
-
-    if (!deletedUser) {
+    // Check if user exists first
+    const [existingUser] = await db.select().from(users).where(eq(users.id, id));
+    
+    if (!existingUser) {
       throw new Error('User not found');
     }
+
+    await db.delete(users).where(eq(users.id, id));
 
     return { message: 'User deleted successfully' };
   }

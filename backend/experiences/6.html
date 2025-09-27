@@ -76,16 +76,24 @@
         <img id="asset-obj_1756247721633_n6ybnhj" src="/uploads/1756247721506-my-image.jpg" crossorigin="anonymous" />
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse"></a-camera>
+      <a-camera 
+        position="0 0 0" 
+        look-controls="enabled: false" 
+        cursor="fuse: false; rayOrigin: mouse"
+        fov="80"
+        near="0.01"
+        far="1000"
+      ></a-camera>
 
       <a-entity mindar-image-target="targetIndex: 0">
                 <a-image 
           src="#asset-obj_1756247721633_n6ybnhj" 
-          position="0 0.06 0.08000000000000002" 
-          rotation="90 0 0" 
-          scale="0.6 0.6 0.6"
+          position="0.000 0.190 0.240" 
+          rotation="26.6 0.0 0.0" 
+          scale="0.360 0.360 0.360"
           side="double"
           crossorigin="anonymous"
+          material="transparent: true; alphaTest: 0.1"
         ></a-image>
       </a-entity>
     </a-scene>

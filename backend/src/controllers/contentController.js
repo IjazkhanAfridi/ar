@@ -49,7 +49,6 @@ class ContentController {
         filename: req.file.originalname,
       });
 
-      console.log('Content file saved:', contentFile);
       res.json(contentFile);
     } catch (error) {
       console.error('Error uploading content:', error);

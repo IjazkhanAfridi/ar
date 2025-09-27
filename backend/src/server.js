@@ -11,7 +11,7 @@ import { logger } from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { apiLimiter } from './middleware/rateLimiter.js';
 import apiRoutes from './routes/index.js';
-import { pool } from './config/database.js';
+import { connection } from './config/mysql-database.js';
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -33,7 +33,7 @@ app.use(
 // CORS configuration
 app.use(
   cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174'],
+    origin: config.CORS_ORIGIN,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
@@ -66,7 +66,16 @@ app.use(
 // API routes
 app.use('/api', apiRoutes);
 
-// 404 handler for undefined routes
+// Serve frontend static files from build
+const frontendDistPath = path.join(__dirname, '..', '..', 'frontend', 'dist');
+app.use(express.static(frontendDistPath));
+
+// Handle SPA routing - send all non-API requests to frontend
+app.get('*', (req, res) => {
+  res.sendFile(path.join(frontendDistPath, 'index.html'));
+});
+
+// Global error handler (moved after static file serving)
 app.use(notFoundHandler);
 
 // Global error handler
@@ -92,10 +101,10 @@ const gracefulShutdown = async (signal) => {
       });
     });
 
-    // Close database pool
-    logger.info('Closing database connection pool...', 'server');
-    await pool.end();
-    logger.info('Database pool closed', 'server');
+    // Close database connection
+    logger.info('Closing database connection...', 'server');
+    await connection.end();
+    logger.info('Database connection closed', 'server');
     
   } catch (error) {
     logger.error('Error during shutdown:', 'server', error);

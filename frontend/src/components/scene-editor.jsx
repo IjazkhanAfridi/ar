@@ -41,6 +41,91 @@ const getFullUrl = (url) => {
   return url;
 };
 
+// CRITICAL: Capture content dimensions for proper scaling
+const captureContentDimensions = (file, contentUrl) => {
+  return new Promise((resolve) => {
+    const fileType = file.type;
+    
+    if (fileType.startsWith('image/')) {
+      const img = new Image();
+      img.onload = function() {
+        const dimensions = {
+          width: this.width,
+          height: this.height,
+          aspectRatio: this.width / this.height,
+          type: 'image'
+        };
+        console.log('[DEBUG] Image dimensions captured:', dimensions);
+        resolve(dimensions);
+      };
+      img.onerror = () => resolve({ type: 'image', width: 512, height: 512, aspectRatio: 1 });
+      img.src = contentUrl;
+    } else if (fileType.startsWith('video/')) {
+      const video = document.createElement('video');
+      video.onloadedmetadata = function() {
+        const dimensions = {
+          width: this.videoWidth,
+          height: this.videoHeight,
+          aspectRatio: this.videoWidth / this.videoHeight,
+          duration: this.duration,
+          type: 'video'
+        };
+        console.log('[DEBUG] Video dimensions captured:', dimensions);
+        resolve(dimensions);
+      };
+      video.onerror = () => resolve({ type: 'video', width: 640, height: 480, aspectRatio: 1.33 });
+      video.src = contentUrl;
+    } else if (fileType.startsWith('audio/')) {
+      const audio = new Audio();
+      audio.onloadedmetadata = function() {
+        const dimensions = {
+          duration: this.duration,
+          type: 'audio'
+        };
+        console.log('[DEBUG] Audio metadata captured:', dimensions);
+        resolve(dimensions);
+      };
+      audio.onerror = () => resolve({ type: 'audio', duration: 0 });
+      audio.src = contentUrl;
+    } else {
+      // For 3D models or unknown types
+      resolve({ type: 'model', width: 1, height: 1, aspectRatio: 1 });
+    }
+  });
+};
+
+// Calculate proper initial scale based on content and marker dimensions
+const calculateInitialScale = (contentDimensions, markerDimensions) => {
+  // Default scale if no dimensions available
+  let baseScale = 1.0;
+  
+  if (markerDimensions && contentDimensions) {
+    const markerSize = Math.min(markerDimensions.width, markerDimensions.height);
+    const contentSize = Math.max(contentDimensions.width || 1, contentDimensions.height || 1);
+    
+    // Scale content to be a reasonable size relative to marker
+    // Aim for content to be about 30-50% of marker size initially
+    const targetRatio = 0.4; // 40% of marker size
+    baseScale = (markerSize * targetRatio) / contentSize;
+    
+    // Clamp scale to reasonable bounds
+    baseScale = Math.max(0.1, Math.min(2.0, baseScale));
+    
+    console.log('[DEBUG] Calculated initial scale:', {
+      markerSize,
+      contentSize,
+      targetRatio,
+      baseScale
+    });
+  }
+  
+  return {
+    x: baseScale,
+    y: baseScale, 
+    z: baseScale
+  };
+};
+
 export function SceneEditor({
   markerImage,
   config,
@@ -235,7 +320,26 @@ export function SceneEditor({
             const reader = new FileReader();
             reader.onload = (e) => {
               const result = e.target?.result;
-              if (result) onMarkerImageUpload(result);
+              if (result) {
+                // Create an image element to get dimensions
+                const img = new Image();
+                img.onload = function() {
+                  const markerData = {
+                    dataUrl: result,
+                    dimensions: {
+                      width: this.width,
+                      height: this.height,
+                      aspectRatio: this.width / this.height
+                    }
+                  };
+                  
+                  console.log('[DEBUG] Marker image dimensions captured:', markerData.dimensions);
+                  
+                  // Pass both image data and dimensions to the upload handler
+                  onMarkerImageUpload(markerData);
+                };
+                img.src = result;
+              }
             };
             reader.readAsDataURL(file);
           }
@@ -295,13 +399,69 @@ export function SceneEditor({
         {/* Content Selector - Scrollable */}
         <div className='flex-1 overflow-y-auto'>
           <ContentSelector
-            onContentSelect={(content) => {
+            onContentSelect={async (content) => {
+              console.log('[DEBUG] Content selected:', content);
+              
+              // CRITICAL FIX: Always place new objects at marker center initially
+              const defaultPosition = {
+                x: 0, // Center of marker horizontally 
+                y: 0.1, // Slightly above marker surface
+                z: 0  // Center of marker depth-wise
+              };
+              
+              let defaultScale = { x: 0.5, y: 0.5, z: 0.5 }; // Default medium scale
+              let defaultRotation = { x: 0, y: 0, z: 0 };
+              let contentDimensions = null;
+              
+              // Capture content dimensions for proper scaling
+              if (content.url) {
+                try {
+                  // Create a temporary file object for dimension capture
+                  const response = await fetch(content.url);
+                  const blob = await response.blob();
+                  const file = new File([blob], content.filename || 'content', { type: blob.type });
+                  
+                  contentDimensions = await captureContentDimensions(file, content.url);
+                  console.log('[DEBUG] Content dimensions:', contentDimensions);
+                } catch (error) {
+                  console.warn('Could not capture content dimensions:', error);
+                }
+              }
+              
+              // Get marker dimensions for scale calculation
+              const markerDimensions = markerImage?.dimensions || null;
+              
+              // Calculate proper scale based on content and marker dimensions
+              if (contentDimensions && markerDimensions) {
+                defaultScale = calculateInitialScale(contentDimensions, markerDimensions);
+                console.log('[DEBUG] Calculated scale:', defaultScale);
+              } else {
+                // Fallback scales by content type if no dimensions available
+                switch (content.type) {
+                  case 'image':
+                  case 'video':
+                    defaultScale = { x: 0.6, y: 0.6, z: 0.6 }; // Medium size for media
+                    break;
+                  case 'model':
+                    defaultScale = { x: 0.3, y: 0.3, z: 0.3 }; // Smaller for 3D models
+                    break;
+                  case 'light':
+                    defaultPosition.y = 2; // Lights should be higher
+                    defaultScale = { x: 1, y: 1, z: 1 };
+                    break;
+                  case 'audio':
+                    defaultScale = { x: 0.1, y: 0.1, z: 0.1 }; // Invisible, small scale
+                    break;
+                }
+              }
+              
               const newConfig = {
-                position: { x: 0, y: 0, z: 0 },
-                rotation: { x: 0, y: 0, z: 0 },
-                scale: { x: 0.3, y: 0.3, z: 0.3 },
+                position: defaultPosition,
+                rotation: defaultRotation,
+                scale: defaultScale,
                 content: {
                   ...content,
+                  dimensions: contentDimensions, // Store content dimensions
                   intensity: content.type === 'light' ? 1 : undefined,
                   color: content.type === 'light' ? '#ffffff' : undefined,
                 },
@@ -470,50 +630,56 @@ export function SceneEditor({
                     <Label className='text-white'>Position</Label>
                     <div className='space-y-2'>
                       <div>
-                        <Label className='text-sm text-gray-300'>X: {selectedObject.sceneObj.position?.x?.toFixed(2) || 0}</Label>
+                        <Label className='text-sm text-gray-300'>X-Position: {selectedObject.sceneObj.position?.x?.toFixed(3) || 0}</Label>
                         <Slider
                           value={[selectedObject.sceneObj.position?.x || 0]}
                           onValueChange={([value]) =>
                             updateObjectTransform(selectedObject.sceneObj.id, 'position', {
                               ...selectedObject.sceneObj.position,
-                              x: value,
+                              x: Number(value.toFixed(3)),
                             })
                           }
-                          min={-10}
-                          max={10}
-                          step={0.1}
+                          min={-5}
+                          max={5}
+                          step={0.01}
                           className='w-full'
                         />
                       </div>
                       <div>
-                        <Label className='text-sm text-gray-300'>Y: {selectedObject.sceneObj.position?.y?.toFixed(2) || 0}</Label>
+                        <Label className='text-sm text-gray-300'>
+                          Y-Height: {selectedObject.sceneObj.position?.y?.toFixed(3) || 0}
+                          <span className="text-xs ml-2 text-gray-400">(above marker)</span>
+                        </Label>
                         <Slider
                           value={[selectedObject.sceneObj.position?.y || 0]}
                           onValueChange={([value]) =>
                             updateObjectTransform(selectedObject.sceneObj.id, 'position', {
                               ...selectedObject.sceneObj.position,
-                              y: value,
+                              y: Number(value.toFixed(3)),
                             })
                           }
-                          min={-10}
-                          max={10}
-                          step={0.1}
+                          min={0}
+                          max={8}
+                          step={0.05}
                           className='w-full'
                         />
                       </div>
                       <div>
-                        <Label className='text-sm text-gray-300'>Z: {selectedObject.sceneObj.position?.z?.toFixed(2) || 0}</Label>
+                        <Label className='text-sm text-gray-300'>
+                          Z-Depth: {selectedObject.sceneObj.position?.z?.toFixed(3) || 0}
+                          <span className="text-xs ml-2 text-gray-400">(forward/backward)</span>
+                        </Label>
                         <Slider
                           value={[selectedObject.sceneObj.position?.z || 0]}
                           onValueChange={([value]) =>
                             updateObjectTransform(selectedObject.sceneObj.id, 'position', {
                               ...selectedObject.sceneObj.position,
-                              z: value,
+                              z: Number(value.toFixed(3)),
                             })
                           }
-                          min={-10}
-                          max={10}
-                          step={0.1}
+                          min={-8}
+                          max={8}
+                          step={0.05}
                           className='w-full'
                         />
                       </div>
@@ -525,52 +691,90 @@ export function SceneEditor({
                 {activeControlPanel === 'rotation' && (
                   <div className='space-y-3'>
                     <Label className='text-white'>Rotation</Label>
+                    
+                    {/* Quick Rotation Presets */}
+                    <div className='flex gap-2 mb-3'>
+                      <button
+                        onClick={() => updateObjectTransform(selectedObject.sceneObj.id, 'rotation', { x: 0, y: 0, z: 0 })}
+                        className='px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded'
+                      >
+                        Vertical
+                      </button>
+                      <button
+                        onClick={() => updateObjectTransform(selectedObject.sceneObj.id, 'rotation', { x: Math.PI/2, y: 0, z: 0 })}
+                        className='px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded'
+                      >
+                        Horizontal
+                      </button>
+                      <button
+                        onClick={() => updateObjectTransform(selectedObject.sceneObj.id, 'rotation', { x: 0, y: Math.PI/2, z: 0 })}
+                        className='px-2 py-1 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded'
+                      >
+                        Turn Right
+                      </button>
+                    </div>
+                    
                     <div className='space-y-2'>
                       <div>
-                        <Label className='text-sm text-gray-300'>X: {(selectedObject.sceneObj.rotation?.x * 180 / Math.PI)?.toFixed(1) || 0}°</Label>
+                        <Label className='text-sm text-gray-300'>
+                          X-Axis (Pitch): {((selectedObject.sceneObj.rotation?.x * 180 / Math.PI) || 0).toFixed(1)}°
+                          <span className="text-xs ml-2 text-gray-400">
+                            (0°=vertical in AR, 90°=horizontal, -90°=upside down)
+                          </span>
+                        </Label>
                         <Slider
-                          value={[selectedObject.sceneObj.rotation?.x || 0]}
+                          value={[(selectedObject.sceneObj.rotation?.x * 180 / Math.PI) || 0]}
                           onValueChange={([value]) =>
                             updateObjectTransform(selectedObject.sceneObj.id, 'rotation', {
                               ...selectedObject.sceneObj.rotation,
-                              x: value,
+                              x: (value * Math.PI / 180),
                             })
                           }
-                          min={-Math.PI}
-                          max={Math.PI}
-                          step={0.1}
+                          min={-180}
+                          max={180}
+                          step={5}
                           className='w-full'
                         />
                       </div>
                       <div>
-                        <Label className='text-sm text-gray-300'>Y: {(selectedObject.sceneObj.rotation?.y * 180 / Math.PI)?.toFixed(1) || 0}°</Label>
+                        <Label className='text-sm text-gray-300'>
+                          Y-Axis (Yaw): {((selectedObject.sceneObj.rotation?.y * 180 / Math.PI) || 0).toFixed(1)}°
+                          <span className="text-xs ml-2 text-gray-400">
+                            (90°=turn right, 0°=forward, -90°=turn left)
+                          </span>
+                        </Label>
                         <Slider
-                          value={[selectedObject.sceneObj.rotation?.y || 0]}
+                          value={[(selectedObject.sceneObj.rotation?.y * 180 / Math.PI) || 0]}
                           onValueChange={([value]) =>
                             updateObjectTransform(selectedObject.sceneObj.id, 'rotation', {
                               ...selectedObject.sceneObj.rotation,
-                              y: value,
+                              y: (value * Math.PI / 180),
                             })
                           }
-                          min={-Math.PI}
-                          max={Math.PI}
-                          step={0.1}
+                          min={-180}
+                          max={180}
+                          step={5}
                           className='w-full'
                         />
                       </div>
                       <div>
-                        <Label className='text-sm text-gray-300'>Z: {(selectedObject.sceneObj.rotation?.z * 180 / Math.PI)?.toFixed(1) || 0}°</Label>
+                        <Label className='text-sm text-gray-300'>
+                          Z-Axis (Roll): {((selectedObject.sceneObj.rotation?.z * 180 / Math.PI) || 0).toFixed(1)}°
+                          <span className="text-xs ml-2 text-gray-400">
+                            (tilt clockwise/counter-clockwise)
+                          </span>
+                        </Label>
                         <Slider
-                          value={[selectedObject.sceneObj.rotation?.z || 0]}
+                          value={[(selectedObject.sceneObj.rotation?.z * 180 / Math.PI) || 0]}
                           onValueChange={([value]) =>
                             updateObjectTransform(selectedObject.sceneObj.id, 'rotation', {
                               ...selectedObject.sceneObj.rotation,
-                              z: value,
+                              z: (value * Math.PI / 180),
                             })
                           }
-                          min={-Math.PI}
-                          max={Math.PI}
-                          step={0.1}
+                          min={-180}
+                          max={180}
+                          step={5}
                           className='w-full'
                         />
                       </div>

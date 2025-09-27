@@ -24,6 +24,7 @@ export default function Create() {
   const { toast } = useToast();
   const mindFileRef = useRef(null);
   const [markerImage, setMarkerImage] = useState();
+  const [markerDimensions, setMarkerDimensions] = useState(null);
   const [showARViewer, setShowARViewer] = useState(false);
   const [transformMode, setTransformMode] = useState('translate');
   const [uploadedMindFile, setUploadedMindFile] = useState();
@@ -41,6 +42,7 @@ export default function Create() {
       title: '',
       description: '',
       markerImage: '',
+      markerDimensions: null,
       contentConfig: {
         position: { x: 0, y: 0, z: 0 },
         rotation: { x: 0, y: 0, z: 0 },
@@ -50,11 +52,31 @@ export default function Create() {
     },
   });
 
+  // Handle marker image upload with dimensions
+  const handleMarkerImageUpload = (markerData) => {
+    if (typeof markerData === 'string') {
+      // Old format - just the data URL
+      setMarkerImage(markerData);
+      form.setValue('markerImage', markerData);
+    } else {
+      // New format - object with dataUrl and dimensions
+      setMarkerImage(markerData.dataUrl);
+      setMarkerDimensions(markerData.dimensions);
+      form.setValue('markerImage', markerData.dataUrl);
+      form.setValue('markerDimensions', markerData.dimensions);
+      
+      console.log('[DEBUG] Marker dimensions captured:', markerData.dimensions);
+    }
+  };
+
   useEffect(() => {
     if (markerImage) {
       form.setValue('markerImage', markerImage);
     }
-  }, [markerImage, form]);
+    if (markerDimensions) {
+      form.setValue('markerDimensions', markerDimensions);
+    }
+  }, [markerImage, markerDimensions, form]);
 
   useEffect(() => {
     form.setValue('contentConfig', {
@@ -71,6 +93,9 @@ export default function Create() {
       formData.append('title', data.title);
       formData.append('description', data.description);
       formData.append('markerImage', data.markerImage);
+      if (data.markerDimensions) {
+        formData.append('markerDimensions', JSON.stringify(data.markerDimensions));
+      }
       formData.append('contentConfig', JSON.stringify(data.contentConfig));
 
       if (!mindFileRef.current) {
@@ -215,7 +240,7 @@ export default function Create() {
             config={sceneConfig}
             onChange={setSceneConfig}
             onMindFileUpload={handleMindFileUpload}
-            onMarkerImageUpload={setMarkerImage}
+            onMarkerImageUpload={handleMarkerImageUpload}
             transformMode={transformMode}
             setTransformMode={setTransformMode}
             uploadedMindFile={uploadedMindFile}

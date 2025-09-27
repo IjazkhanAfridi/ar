@@ -12,106 +12,326 @@ const __dirname = path.dirname(__filename);
 // ---------------------------------------------------------------------------
 // Transformation Configuration - IMPROVED FOR ACCURATE POSITIONING
 // ---------------------------------------------------------------------------
-// Configuration for precise positioning optimized for TOP-DOWN VIEW (Sky to Earth perspective)
-const POSITION_SCALE = parseFloat(process.env.AR_POSITION_SCALE || '1.0'); // 1:1 scale for accurate positioning
-const ENFORCE_TOP_DOWN_VIEW = (process.env.AR_ENFORCE_TOP_DOWN || 'true').toLowerCase() === 'true'; // Always enforce top-down view
-const Y_OFFSET_FOR_VISIBILITY = parseFloat(process.env.AR_Y_OFFSET || '0.02'); // Small offset to ensure visibility above marker
-const PRESERVE_USER_TRANSFORMS = (process.env.AR_PRESERVE_TRANSFORMS || 'false').toLowerCase() === 'true'; // Force top-down transforms by default
+// Configuration for accurate AR positioning and user-controlled transforms
+const POSITION_SCALE = parseFloat(process.env.AR_POSITION_SCALE || '0.5'); // Optimized scale for AR space
+const Y_OFFSET_FOR_VISIBILITY = parseFloat(process.env.AR_Y_OFFSET || '0.02'); // Minimum height above marker
+const DEBUG_TRANSFORMS = (process.env.AR_DEBUG_TRANSFORMS || 'true').toLowerCase() === 'true'; // Enable transform debugging
+
+// 3D Model specific rotation adjustments (in radians)
+const MODEL_ROTATION_OFFSET_X = parseFloat(process.env.AR_MODEL_ROTATION_X || '0'); // Additional X rotation for 3D models
+const MODEL_ROTATION_OFFSET_Y = parseFloat(process.env.AR_MODEL_ROTATION_Y || '0'); // Additional Y rotation for 3D models  
+const MODEL_ROTATION_OFFSET_Z = parseFloat(process.env.AR_MODEL_ROTATION_Z || '0'); // Additional Z rotation for 3D models
+
+// Enhanced position and scale configuration
+const AR_POSITION_SCALE_FACTOR = parseFloat(process.env.AR_POSITION_SCALE_FACTOR || '0.5');
+const AR_SCALE_FACTOR_IMAGE = parseFloat(process.env.AR_SCALE_FACTOR_IMAGE || '0.8');
+const AR_SCALE_FACTOR_MODEL = parseFloat(process.env.AR_SCALE_FACTOR_MODEL || '0.9');
+const AR_SCALE_FACTOR_VIDEO = parseFloat(process.env.AR_SCALE_FACTOR_VIDEO || '0.8');
+const AR_USE_MARKER_SCALING = (process.env.AR_USE_MARKER_SCALING || 'true').toLowerCase() === 'true';
+const AR_MARKER_BASELINE_SIZE = parseFloat(process.env.AR_MARKER_BASELINE_SIZE || '200');
 
 function transformPlacement(obj, markerDimensions = null) {
-  // Original values from the creation experience
+  // Original values from the creation experience (frontend sends in radians and AR units)
   let { x, y, z } = obj.position || { x: 0, y: 0, z: 0 };
   let { x: rx, y: ry, z: rz } = obj.rotation || { x: 0, y: 0, z: 0 };
   let { x: sx, y: sy, z: sz } = obj.scale || { x: 1, y: 1, z: 1 };
 
-  // Apply position scaling for AR space
-  x *= POSITION_SCALE;
-  y *= POSITION_SCALE;
-  z *= POSITION_SCALE;
+  if (DEBUG_TRANSFORMS) {
+    console.log(`[DEBUG] Original transform for ${obj.content?.type}:`, {
+      position: { x, y, z },
+      rotation: { rx, ry, rz },
+      scale: { sx, sy, sz }
+    });
+  }
 
-  // TOP-DOWN VIEW TRANSFORMATION - "Sky to Earth" perspective
-  if (ENFORCE_TOP_DOWN_VIEW) {
-    // For top-down view, we need to ensure objects are oriented correctly
-    // when viewed from above (like looking down from the sky to earth)
+  // ---------------------------------------------------------------------------
+  // COORDINATE SYSTEM TRANSFORMATION
+  // ---------------------------------------------------------------------------
+  // Creation view: Camera at [2,2,2] looking down at [0,0,0]
+  // AR view: Camera at [0,0,0] looking forward along Z-axis
+  // We need to transform coordinates to maintain the same visual relationship
+
+  // Transform from creation coordinate system to AR coordinate system
+  // Creation: Y-up, looking down from above
+  // AR: Z-forward, Y-up, looking straight ahead
+
+  // Store original values for reference
+  const originalX = x, originalY = y, originalZ = z;
+  const originalRx = rx, originalRy = ry, originalRz = rz;
+
+  // ---------------------------------------------------------------------------
+  // POSITION TRANSFORMATION - PRESERVE SPATIAL RELATIONSHIPS
+  // ---------------------------------------------------------------------------
+  // The goal is to maintain the exact spatial relationships from creation view in AR view
+  // Creation view has objects positioned in a 3D space that needs to map to AR marker space
+  
+  // Calculate marker-relative scale based on marker dimensions (if available)
+  let markerScale = 1.0;
+  if (markerDimensions && markerDimensions.width && markerDimensions.height) {
+    // Use marker dimensions to create appropriate scaling
+    // Typical marker is ~100-200px, we want objects to fit reasonably in AR space
+    const markerSizeInMeters = Math.min(markerDimensions.width, markerDimensions.height) / 1000; // Convert px to approximate meters
+    markerScale = Math.max(0.1, Math.min(1.0, markerSizeInMeters)); // Clamp between 0.1 and 1.0
+  }
+  
+  // Apply position scaling that preserves relationships
+  // Use configurable scale factor to maintain user-intended positioning
+  const AR_POSITION_SCALE = AR_POSITION_SCALE_FACTOR * markerScale; // Use configurable scale
+  
+  // CRITICAL FIX: Preserve marker-centered coordinate system
+  // In creation: (0,0,0) = marker center, user moves objects relative to this center
+  // In AR: (0,0,0) = marker center, objects should appear exactly where user placed them
+  
+  // Apply minimal scaling to fit AR marker space while preserving relationships
+  x *= AR_POSITION_SCALE;
+  z *= AR_POSITION_SCALE;
+  
+  // Y-axis: preserve height relationships but ensure objects are above marker surface
+  y = (y * AR_POSITION_SCALE) + 0.02; // Preserve Y relationships + small offset above marker
+  
+  // Marker-based position adjustment if marker dimensions are available
+  if (markerDimensions && markerDimensions.width && markerDimensions.height) {
+    // Normalize position based on marker aspect ratio to handle rectangular markers properly
+    const markerAspect = markerDimensions.width / markerDimensions.height;
     
-    switch (obj.content.type) {
-      case 'image':
-        // Images should lay flat on the marker plane, facing upward
-        // For true top-down view: -90 degrees on X-axis makes the image lie flat and face up
-        rx = -Math.PI / 2; // -90 degrees in radians
-        ry = 0;
-        rz = 0;
-        // Position images on or slightly above the marker plane
-        y = Math.max(y, Y_OFFSET_FOR_VISIBILITY);
-        break;
-        
-      case 'video':
-        // Same as images - should lay flat facing upward
-        rx = -Math.PI / 2; // -90 degrees in radians  
-        ry = 0;
-        rz = 0;
-        y = Math.max(y, Y_OFFSET_FOR_VISIBILITY);
-        break;
-        
-      case 'model':
-        // Models may need different handling depending on their natural orientation
-        // If user hasn't set specific rotation, orient for top-down view
-        if (Math.abs(rx) < 0.01 && Math.abs(ry) < 0.01 && Math.abs(rz) < 0.01) {
-          // Default: keep model upright for top-down viewing
-          // Most models are created to be viewed from the side, so no rotation needed
-          rx = 0;
-          ry = 0; 
-          rz = 0;
-        } else {
-          // Preserve user's rotation but ensure it works for top-down view
-          // Convert degrees to radians if needed
-          rx = rx > Math.PI ? rx * (Math.PI / 180) : rx;
-          ry = ry > Math.PI ? ry * (Math.PI / 180) : ry;
-          rz = rz > Math.PI ? rz * (Math.PI / 180) : rz;
-        }
-        // Keep model positioning as set by user, but ensure minimum height
-        y = Math.max(y, Y_OFFSET_FOR_VISIBILITY);
-        break;
-        
-      case 'light':
-        // Lights should be positioned above the scene for top-down illumination
-        // Convert degrees to radians if needed
-        rx = rx > Math.PI ? rx * (Math.PI / 180) : rx;
-        ry = ry > Math.PI ? ry * (Math.PI / 180) : ry;
-        rz = rz > Math.PI ? rz * (Math.PI / 180) : rz;
-        // Position lights above for better top-down illumination
-        y = Math.max(y, 1.0); // Ensure lights are well above the marker
-        break;
-        
-      case 'audio':
-        // Audio sources can be positioned anywhere, preserve user settings
-        rx = rx > Math.PI ? rx * (Math.PI / 180) : rx;
-        ry = ry > Math.PI ? ry * (Math.PI / 180) : ry;
-        rz = rz > Math.PI ? rz * (Math.PI / 180) : rz;
-        break;
-        
-      default:
-        // For any other types, preserve user rotation
-        rx = rx > Math.PI ? rx * (Math.PI / 180) : rx;
-        ry = ry > Math.PI ? ry * (Math.PI / 180) : ry;
-        rz = rz > Math.PI ? rz * (Math.PI / 180) : rz;
+    if (markerAspect > 1) {
+      // Wide marker: scale X positions more
+      x *= markerAspect * 0.5;
+    } else {
+      // Tall marker: scale Z positions more  
+      z *= (1 / markerAspect) * 0.5;
     }
-  } else {
-    // When top-down view is disabled, preserve user rotations
-    rx = rx > Math.PI ? rx * (Math.PI / 180) : rx;
-    ry = ry > Math.PI ? ry * (Math.PI / 180) : ry;
-    rz = rz > Math.PI ? rz * (Math.PI / 180) : rz;
+  }
+  
+  if (DEBUG_TRANSFORMS) {
+    console.log(`[DEBUG] Position transform for ${obj.content?.type}:`, {
+      original: { x: originalX.toFixed(3), y: originalY.toFixed(3), z: originalZ.toFixed(3) },
+      scale_factor: AR_POSITION_SCALE.toFixed(3),
+      marker_scale: markerScale.toFixed(3),
+      transformed: { x: x.toFixed(3), y: y.toFixed(3), z: z.toFixed(3) }
+    });
   }
 
-  // Ensure objects are positioned for optimal visibility
+  // ---------------------------------------------------------------------------
+  // ROTATION TRANSFORMATION - COORDINATE SYSTEM CONVERSION
+  // ---------------------------------------------------------------------------
+  // CRITICAL: Transform from creation coordinate system to AR coordinate system
+  // 
+  // Creation View: Camera at [2,2,2] looking down at [0,0,0]
+  //   - Objects face "up" toward the camera (Y+ direction)  
+  //   - When user sets "vertical", object faces upward in 3D space
+  //
+  // AR View: Camera at [0,0,0] looking forward along Z-axis  
+  //   - Objects face "forward" toward the camera (Z- direction)
+  //   - When user set "vertical" in creation, it should stay vertical in AR
+  //
+  // Solution: Apply coordinate system transformation matrix
+
+  // The key insight: Creation camera looks down (-Y), AR camera looks forward (+Z)
+  // We need to rotate the entire coordinate system by 90° around X-axis
+  
+  if (DEBUG_TRANSFORMS) {
+    console.log(`[DEBUG] Original rotation for ${obj.content?.type}:`, {
+      rx_deg: (originalRx * 180/Math.PI).toFixed(1),
+      ry_deg: (originalRy * 180/Math.PI).toFixed(1), 
+      rz_deg: (originalRz * 180/Math.PI).toFixed(1)
+    });
+  }
+  
+  switch (obj.content.type) {
+    case 'image':
+    case 'video':
+      // For media objects, apply coordinate system transformation
+      // Creation: user sees from above, AR: user sees from front
+      
+      // Transform coordinate system: rotate 90° around X to convert Y-up to Z-forward view
+      // This maintains the visual appearance the user intended
+      
+      // Original rotation in creation coordinate system
+      // Convert to AR coordinate system by rotating the reference frame
+      rx = originalRx + Math.PI/2; // Add 90° to X rotation to convert coordinate systems
+      ry = originalRy;             // Y rotation (left/right turn) stays the same
+      rz = originalRz;             // Z rotation (roll/tilt) stays the same
+      
+      // Normalize rotations to [-π, π] range
+      while (rx > Math.PI) rx -= 2 * Math.PI;
+      while (rx < -Math.PI) rx += 2 * Math.PI;
+      
+      break;
+      
+    case 'model':
+      // 3D models require the SAME coordinate system transformation as images/videos
+      // to maintain the visual orientation that the user set during creation
+      
+      if (DEBUG_TRANSFORMS) {
+        console.log(`[DEBUG] 3D Model original rotation:`, {
+          rx_deg: (originalRx * 180/Math.PI).toFixed(1), 
+          ry_deg: (originalRy * 180/Math.PI).toFixed(1), 
+          rz_deg: (originalRz * 180/Math.PI).toFixed(1)
+        });
+      }
+      
+      // Apply the EXACT SAME transformation as images/videos
+      // This ensures consistency across all object types
+      
+      // Transform coordinate system: rotate 90° around X to convert Y-up to Z-forward view
+      rx = originalRx + Math.PI/2 + MODEL_ROTATION_OFFSET_X; // Add 90° + any model-specific offset
+      ry = originalRy + MODEL_ROTATION_OFFSET_Y;             // Y rotation + any model-specific offset
+      rz = originalRz + MODEL_ROTATION_OFFSET_Z;             // Z rotation + any model-specific offset
+      
+      // Normalize rotations to [-π, π] range
+      while (rx > Math.PI) rx -= 2 * Math.PI;
+      while (rx < -Math.PI) rx += 2 * Math.PI;
+      while (ry > Math.PI) ry -= 2 * Math.PI;
+      while (ry < -Math.PI) ry += 2 * Math.PI;
+      while (rz > Math.PI) rz -= 2 * Math.PI;
+      while (rz < -Math.PI) rz += 2 * Math.PI;
+      
+      if (DEBUG_TRANSFORMS) {
+        console.log(`[DEBUG] 3D Model transformed rotation:`, {
+          rx_deg: (rx * 180/Math.PI).toFixed(1), 
+          ry_deg: (ry * 180/Math.PI).toFixed(1), 
+          rz_deg: (rz * 180/Math.PI).toFixed(1),
+          transformation: "Applied +90° X rotation for coordinate system conversion"
+        });
+      }
+      break;
+      
+    case 'light':
+    case 'audio':
+    default:
+      // For lights, audio, and other objects, preserve exact rotation
+      rx = originalRx;
+      ry = originalRy; 
+      rz = originalRz;
+      break;
+  }
+  
+  if (DEBUG_TRANSFORMS) {
+    console.log(`[DEBUG] Transformed rotation for ${obj.content?.type}:`, {
+      rx_deg: (rx * 180/Math.PI).toFixed(1),
+      ry_deg: (ry * 180/Math.PI).toFixed(1),
+      rz_deg: (rz * 180/Math.PI).toFixed(1),
+      transformation: 'Added +90° to X-axis for coordinate system conversion'
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // SCALE TRANSFORMATION - PRESERVE USER-INTENDED SIZING
+  // ---------------------------------------------------------------------------
+  // The key insight: preserve the relative scale relationships the user created
+  // Different object types may need different scale handling
+  
+  let AR_SCALE_FACTOR;
+  
+  switch (obj.content.type) {
+    case 'image':
+      AR_SCALE_FACTOR = AR_SCALE_FACTOR_IMAGE;
+      break;
+      
+    case 'video':
+      AR_SCALE_FACTOR = AR_SCALE_FACTOR_VIDEO;
+      break;
+      
+    case 'model':
+      AR_SCALE_FACTOR = AR_SCALE_FACTOR_MODEL;
+      break;
+      
+    case 'audio':
+      // Audio objects are invisible, scale doesn't matter visually but keep consistent
+      AR_SCALE_FACTOR = 1.0;
+      break;
+      
+    default:
+      AR_SCALE_FACTOR = AR_SCALE_FACTOR_IMAGE; // Default to image scaling
+      break;
+  }
+  
+  // Apply marker-relative scaling if enabled and marker dimensions are available
+  if (AR_USE_MARKER_SCALING && markerDimensions && markerDimensions.width && markerDimensions.height) {
+    // Adjust scale based on marker size - larger markers can support larger objects
+    const markerSizeFactor = Math.min(markerDimensions.width, markerDimensions.height) / AR_MARKER_BASELINE_SIZE;
+    AR_SCALE_FACTOR *= Math.max(0.5, Math.min(1.5, markerSizeFactor)); // Clamp between 0.5x and 1.5x
+  }
+  
+  // Store original scale for debugging
+  const originalSx = sx, originalSy = sy, originalSz = sz;
+  
+  // CRITICAL FIX: Use content dimensions for intelligent scaling
+  let contentBasedScaling = 1.0;
+  
+  if (obj.content && obj.content.dimensions && markerDimensions) {
+    const contentDims = obj.content.dimensions;
+    const markerSize = Math.min(markerDimensions.width, markerDimensions.height);
+    const contentSize = Math.max(contentDims.width || 1, contentDims.height || 1);
+    
+    // Calculate scale factor to make content appropriately sized for marker
+    contentBasedScaling = (markerSize * 0.3) / contentSize; // Content should be ~30% of marker size
+    contentBasedScaling = Math.max(0.1, Math.min(2.0, contentBasedScaling)); // Clamp to reasonable bounds
+    
+    if (DEBUG_TRANSFORMS) {
+      console.log(`[DEBUG] Content-based scaling for ${obj.content.type}:`, {
+        contentSize,
+        markerSize,
+        contentBasedScaling: contentBasedScaling.toFixed(3)
+      });
+    }
+  }
+  
+  // Combine base AR scaling with content-based scaling
+  const finalScaleFactor = AR_SCALE_FACTOR * contentBasedScaling;
+  
+  // Apply final scale transformation
+  sx *= finalScaleFactor;
+  sy *= finalScaleFactor; 
+  sz *= finalScaleFactor;
+  
+  if (DEBUG_TRANSFORMS) {
+    console.log(`[DEBUG] Complete transform for ${obj.content?.type}:`, {
+      original: { 
+        scale: { sx: originalSx.toFixed(3), sy: originalSy.toFixed(3), sz: originalSz.toFixed(3) }
+      },
+      factors: {
+        AR_scale: AR_SCALE_FACTOR.toFixed(3),
+        content_based: contentBasedScaling.toFixed(3),
+        final: finalScaleFactor.toFixed(3)
+      },
+      transformed: { 
+        scale: { sx: sx.toFixed(3), sy: sy.toFixed(3), sz: sz.toFixed(3) }
+      },
+      content_dims: obj.content?.dimensions || 'none',
+      marker_dims: markerDimensions || 'none'
+    });
+  }
+
+  // Ensure minimum Y position for visibility
   if (Math.abs(y) < 0.001) {
-    y = Y_OFFSET_FOR_VISIBILITY;
+    y = 0.01; // Small offset above marker
   }
 
-  // Convert radians back to degrees for A-Frame (A-Frame uses degrees)
+  // Convert radians to degrees for A-Frame (A-Frame expects degrees)
   const rotationXDeg = rx * (180 / Math.PI);
   const rotationYDeg = ry * (180 / Math.PI);
   const rotationZDeg = rz * (180 / Math.PI);
+
+  // Enhanced debug logging with transformation details
+  console.log(`[DEBUG] Transform for ${obj.content?.type} (ID: ${obj.id}):`, {
+    original: {
+      position: { x: originalX.toFixed(3), y: originalY.toFixed(3), z: originalZ.toFixed(3) },
+      rotation: { 
+        radians: { rx: originalRx.toFixed(3), ry: originalRy.toFixed(3), rz: originalRz.toFixed(3) },
+        degrees: { x: (originalRx * 180/Math.PI).toFixed(1), y: (originalRy * 180/Math.PI).toFixed(1), z: (originalRz * 180/Math.PI).toFixed(1) }
+      }
+    },
+    transformed: {
+      position: { x: x.toFixed(3), y: y.toFixed(3), z: z.toFixed(3) },
+      rotation: { 
+        radians: { rx: rx.toFixed(3), ry: ry.toFixed(3), rz: rz.toFixed(3) },
+        degrees: { x: rotationXDeg.toFixed(1), y: rotationYDeg.toFixed(1), z: rotationZDeg.toFixed(1) }
+      },
+      scale: { sx: sx.toFixed(3), sy: sy.toFixed(3), sz: sz.toFixed(3) }
+    }
+  });
 
   return {
     positionStr: `${x.toFixed(3)} ${y.toFixed(3)} ${z.toFixed(3)}`,
@@ -134,17 +354,15 @@ export function generateExperienceHtml(experience) {
     throw new Error('At least one scene object is required');
   }
 
-  console.log('Generating HTML for experience with TOP-DOWN VIEW optimization:', {
+  console.log('Generating AR experience HTML with enhanced positioning:', {
     id: experience.id,
     title: experience.title,
     mindFile: experience.mindFile,
     sceneObjectsCount: experience.contentConfig.sceneObjects.length,
-    audioCount: experience.contentConfig.sceneObjects.filter(
-      (obj) => obj.content.type === 'audio'
-    ).length,
-    topDownViewEnabled: ENFORCE_TOP_DOWN_VIEW,
+    mediaTypes: experience.contentConfig.sceneObjects.map(obj => obj.content.type),
     positionScale: POSITION_SCALE,
     yOffset: Y_OFFSET_FOR_VISIBILITY,
+    debugMode: DEBUG_TRANSFORMS,
   });
 
   const assets = experience.contentConfig.sceneObjects
@@ -182,6 +400,7 @@ export function generateExperienceHtml(experience) {
           scale="${scaleStr}"
           side="double"
           crossorigin="anonymous"
+          material="transparent: true; alphaTest: 0.1"
         ></a-image>`;
 
         case 'video':
@@ -190,11 +409,13 @@ export function generateExperienceHtml(experience) {
           position="${positionStr}" 
           rotation="${rotationStr}" 
           scale="${scaleStr}"
-          autoplay="true"
+          autoplay="false"
+          loop="true"
           data-video-id="asset-${obj.id}"
           crossorigin="anonymous"
           playsinline
           webkit-playsinline
+          material="transparent: true"
         ></a-video>`;
 
         case 'model':
@@ -354,7 +575,6 @@ export function generateExperienceHtml(experience) {
 
         // Hide loading when AR is ready
         scene.addEventListener('loaded', function() {
-          console.log('AR Scene loaded');
           setTimeout(() => {
             if (loading) {
               loading.style.display = 'none';
@@ -384,7 +604,6 @@ export function generateExperienceHtml(experience) {
           });
 
           arTarget.addEventListener('targetLost', function() {
-            console.log('AR Target lost!');
             // Pause all audios and videos when target is lost
             pauseAudios();
             pauseVideos();
@@ -559,7 +778,6 @@ export function saveExperienceHtml(experience) {
 
   try {
     fs.writeFileSync(filePath, html, 'utf8');
-    console.log(`Experience HTML saved: ${filename}`);
     return `/experiences/${filename}`;
   } catch (error) {
     console.error('Error saving experience HTML:', error);
@@ -785,7 +1003,6 @@ ${allTargets.join('\n\n')}
 
         // Hide loading when AR is ready
         scene.addEventListener('loaded', function() {
-          console.log('Multiple Image AR Scene loaded');
           setTimeout(() => {
             if (loading) {
               loading.style.display = 'none';
@@ -805,7 +1022,6 @@ ${allTargets.join('\n\n')}
           });
 
           target.addEventListener('targetLost', function() {
-            console.log('AR Target', index, 'lost!');
           });
         });
 

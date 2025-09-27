@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <title>AR Experience - wefgjh</title>
+    <title>AR Experience - trgf</title>
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     <style>
@@ -73,20 +73,25 @@
       device-orientation-permission-ui="enabled: false"
     >
       <a-assets>
-        <img id="asset-obj_1756246895651_19si7df" src="/uploads/1756246895524-my-image.jpg" crossorigin="anonymous" />
+        <a-asset-item id="asset-1759010334435mtyer8tul" src="/uploads/1759010332446-Terracotta_Harmony_0516102104_texture.glb"></a-asset-item>
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse"></a-camera>
+      <a-camera 
+        position="0 0 0" 
+        look-controls="enabled: false" 
+        cursor="fuse: false; rayOrigin: mouse"
+        fov="80"
+        near="0.01"
+        far="1000"
+      ></a-camera>
 
       <a-entity mindar-image-target="targetIndex: 0">
-                <a-image 
-          src="#asset-obj_1756246895651_19si7df" 
-          position="0 0.06999999999999999 0" 
-          rotation="90 0 0" 
-          scale="0.7 0.7 0.7"
-          side="double"
-          crossorigin="anonymous"
-        ></a-image>
+                <a-entity 
+          gltf-model="#asset-1759010334435mtyer8tul" 
+          position="-0.215 0.135 -0.070" 
+          rotation="90.0 0.0 0.0" 
+          scale="0.353 0.353 0.353"
+        ></a-entity>
       </a-entity>
     </a-scene>
 
@@ -108,7 +113,6 @@
 
         // Hide loading when AR is ready
         scene.addEventListener('loaded', function() {
-          console.log('AR Scene loaded');
           setTimeout(() => {
             if (loading) {
               loading.style.display = 'none';
@@ -138,7 +142,6 @@
           });
 
           arTarget.addEventListener('targetLost', function() {
-            console.log('AR Target lost!');
             // Pause all audios and videos when target is lost
             pauseAudios();
             pauseVideos();
