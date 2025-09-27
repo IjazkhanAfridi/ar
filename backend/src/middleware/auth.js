@@ -143,7 +143,6 @@ export async function optionalAuth(req, res, next) {
         }
       } catch (error) {
         // Ignore token errors for optional auth
-        console.log('Optional auth token invalid:', error.message);
       }
     }
 

@@ -11,6 +11,7 @@ import { logger } from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { apiLimiter } from './middleware/rateLimiter.js';
 import apiRoutes from './routes/index.js';
+import { connection } from './config/mysql-database.js';
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -32,7 +33,7 @@ app.use(
 // CORS configuration
 app.use(
   cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174'],
+    origin: config.CORS_ORIGIN,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
@@ -53,7 +54,7 @@ app.use(cookieParser(config.COOKIE_SECRET));
 app.use(logger.requestLogger());
 
 // Rate limiting for API routes
-app.use('/api', apiLimiter);
+// app.use('/api', apiLimiter);
 
 // Static file serving for uploads and experiences
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
@@ -65,7 +66,16 @@ app.use(
 // API routes
 app.use('/api', apiRoutes);
 
-// 404 handler for undefined routes
+// Serve frontend static files from build
+const frontendDistPath = path.join(__dirname, '..', '..', 'frontend', 'dist');
+app.use(express.static(frontendDistPath));
+
+// Handle SPA routing - send all non-API requests to frontend
+app.get('*', (req, res) => {
+  res.sendFile(path.join(frontendDistPath, 'index.html'));
+});
+
+// Global error handler (moved after static file serving)
 app.use(notFoundHandler);
 
 // Global error handler
@@ -79,23 +89,38 @@ const server = app.listen(config.PORT, config.HOST, () => {
 });
 
 // Graceful shutdown
-const gracefulShutdown = (signal) => {
+const gracefulShutdown = async (signal) => {
   logger.info(`Received ${signal}. Starting graceful shutdown...`, 'server');
 
-  server.close(() => {
-    logger.info('HTTP server closed', 'server');
-    process.exit(0);
-  });
+  try {
+    // Close HTTP server
+    await new Promise((resolve) => {
+      server.close(() => {
+        logger.info('HTTP server closed', 'server');
+        resolve();
+      });
+    });
 
-  // Force close after 10 seconds
-  setTimeout(() => {
-    logger.error(
-      'Could not close connections in time, forcefully shutting down',
-      'server'
-    );
-    process.exit(1);
-  }, 10000);
+    // Close database connection
+    logger.info('Closing database connection...', 'server');
+    await connection.end();
+    logger.info('Database connection closed', 'server');
+    
+  } catch (error) {
+    logger.error('Error during shutdown:', 'server', error);
+  }
+
+  process.exit(0);
 };
+
+// Commented out force shutdown for debugging
+// const forceShutdown = setTimeout(() => {
+//   logger.error(
+//     'Could not close connections in time, forcefully shutting down',
+//     'server'
+//   );
+//   process.exit(1);
+// }, 10000);
 
 // Handle shutdown signals
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

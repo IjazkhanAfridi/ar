@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Card,
   CardContent,
@@ -14,6 +15,7 @@ import { Play, Share, Eye, Search, Filter, Edit } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 
 export default function Experiences() {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('newest');
 
@@ -30,14 +32,15 @@ export default function Experiences() {
   });
 
   const getMarkerImageUrl = (markerImage, experienceId) => {
-    if (markerImage.startsWith('data:image/')) {
+    if (markerImage && markerImage.startsWith('data:image/')) {
       return markerImage;
     }
-    return `/api/markers/${experienceId}-marker.png`;
+    return `${API_BASE_URL}/api/experiences/markers/${experienceId}.png`;
   };
 
   const handleEditExperience = (experience) => {
-    window.location.href = `/edit-experience/${experience.id}`;
+    console.log('Navigating to edit experience:', experience.id);
+    navigate(`/edit-experience/${experience.id}`);
   };
 
   const handleLaunchViewer = (experience) => {
@@ -97,65 +100,69 @@ export default function Experiences() {
 
   if (isLoading) {
     return (
-      <div className='container bg-slate-800 mx-auto p-6'>
-        <div className='mb-8'>
-          <div className='h-8 bg-gray-200 rounded w-48 mb-2 animate-pulse'></div>
-          <div className='h-4 bg-gray-200 rounded w-64 animate-pulse'></div>
-        </div>
+      <div className='min-h-screen bg-slate-900 p-6'>
+        <div className='container mx-auto'>
+          <div className='mb-8'>
+            <div className='h-8 bg-gray-700 rounded w-48 mb-2 animate-pulse'></div>
+            <div className='h-4 bg-gray-700 rounded w-64 animate-pulse'></div>
+          </div>
 
-        <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
-          {[...Array(6)].map((_, i) => (
-            <Card key={i} className='animate-pulse'>
-              <div className='h-48 bg-gray-200 rounded-t-lg'></div>
-              <CardHeader>
-                <div className='h-4 bg-gray-200 rounded w-3/4'></div>
-                <div className='h-3 bg-gray-200 rounded w-1/2'></div>
-              </CardHeader>
-            </Card>
-          ))}
+          <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
+            {[...Array(6)].map((_, i) => (
+              <Card key={i} className='animate-pulse bg-slate-800 border-slate-700'>
+                <div className='h-48 bg-gray-700 rounded-t-lg'></div>
+                <CardHeader>
+                  <div className='h-4 bg-gray-700 rounded w-3/4'></div>
+                  <div className='h-3 bg-gray-700 rounded w-1/2'></div>
+                </CardHeader>
+              </Card>
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className='container bg-slate-800 mx-auto p-6'>
-      {/* Header */}
-      <div className='mb-8'>
-        <h1 className='text-3xl font-bold mb-2'>AR Experiences</h1>
-        <p className='text-muted-foreground'>
-          Explore all available augmented reality experiences
-        </p>
-      </div>
-
-      {/* Filters and Search */}
-      <div className='flex flex-col md:flex-row gap-4 mb-8'>
-        <div className='relative flex-1'>
-          <Search className='absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4' />
-          <Input
-            placeholder='Search experiences...'
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className='pl-10'
-          />
+    <div className='min-h-screen bg-slate-900 p-6'>
+      <div className='container mx-auto'>
+        {/* Header */}
+        <div className='mb-8'>
+          <h1 className='text-3xl font-bold mb-2 text-white'>AR Experiences</h1>
+          <p className='text-slate-400'>
+            Explore all available augmented reality experiences
+          </p>
         </div>
 
-        <div className='flex gap-2'>
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className='px-3 py-2 border border-input rounded-md bg-background'
-          >
-            <option value='newest'>Newest First</option>
-            <option value='oldest'>Oldest First</option>
-            <option value='title'>Alphabetical</option>
-          </select>
+        {/* Filters and Search */}
+        <div className='flex flex-col md:flex-row gap-4 mb-8'>
+          <div className='relative flex-1'>
+            <Search className='absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4' />
+            <Input
+              placeholder='Search experiences...'
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className='pl-10 bg-slate-800 border-slate-700 text-white placeholder-slate-400'
+            />
+          </div>
+
+          <div className='flex gap-2'>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className='px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white'
+            >
+              <option value='newest'>Newest First</option>
+              <option value='oldest'>Oldest First</option>
+              <option value='title'>Alphabetical</option>
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Results Count */}
       <div className='mb-6'>
-        <p className='text-sm text-muted-foreground'>
+        <p className='text-sm text-slate-400'>
           {filteredExperiences.length} experience
           {filteredExperiences.length !== 1 ? 's' : ''} found
         </p>
@@ -164,16 +171,19 @@ export default function Experiences() {
       {/* Experiences Grid */}
       {filteredExperiences.length === 0 ? (
         <div className='text-center py-12'>
-          <h2 className='text-xl font-semibold mb-2'>
+          <h2 className='text-xl font-semibold mb-2 text-white'>
             {searchTerm ? 'No experiences found' : 'No experiences yet'}
           </h2>
-          <p className='text-muted-foreground mb-4'>
+          <p className='text-slate-400 mb-4'>
             {searchTerm
               ? 'Try adjusting your search terms'
               : 'Create your first AR experience to get started'}
           </p>
           {!searchTerm && (
-            <Button onClick={() => (window.location.href = '/create')}>
+            <Button 
+              onClick={() => (window.location.href = '/create')}
+              className='bg-blue-600 hover:bg-blue-700 text-white'
+            >
               Create Experience
             </Button>
           )}
@@ -183,7 +193,7 @@ export default function Experiences() {
           {filteredExperiences.map((experience) => (
             <Card
               key={experience.id}
-              className='overflow-hidden bg-slate-900 hover:shadow-lg transition-shadow'
+              className='overflow-hidden bg-slate-800 border-slate-700 hover:shadow-lg transition-shadow'
             >
               <div className='aspect-video bg-slate-800 relative overflow-hidden'>
                 <img
@@ -215,10 +225,10 @@ export default function Experiences() {
               </div>
 
               <CardHeader>
-                <CardTitle className='line-clamp-1'>
+                <CardTitle className='line-clamp-1 text-white'>
                   {experience.title}
                 </CardTitle>
-                <CardDescription className='line-clamp-2'>
+                <CardDescription className='line-clamp-2 text-slate-400'>
                   {experience.description}
                 </CardDescription>
               </CardHeader>
@@ -227,7 +237,7 @@ export default function Experiences() {
                 <div className='flex gap-2'>
                   <Button
                     size='sm'
-                    className='flex-1'
+                    className='flex-1 bg-blue-600 hover:bg-blue-700 text-white'
                     onClick={() => handleLaunchViewer(experience)}
                   >
                     <Play className='h-4 w-4 mr-1' />
@@ -236,6 +246,7 @@ export default function Experiences() {
                   <Button
                     size='sm'
                     variant='outline'
+                    className='border-slate-600 text-slate-300 hover:bg-slate-700'
                     onClick={() => handleEditExperience(experience)}
                   >
                     <Edit className='h-4 w-4' />
@@ -243,6 +254,7 @@ export default function Experiences() {
                   <Button
                     size='sm'
                     variant='outline'
+                    className='border-slate-600 text-slate-300 hover:bg-slate-700'
                     onClick={() => handleViewExperience(experience)}
                   >
                     <Eye className='h-4 w-4' />
@@ -250,6 +262,7 @@ export default function Experiences() {
                   <Button
                     size='sm'
                     variant='outline'
+                    className='border-slate-600 text-slate-300 hover:bg-slate-700'
                     onClick={() => handleShare(experience)}
                   >
                     <Share className='h-4 w-4' />

@@ -78,35 +78,45 @@
         <video id="asset-obj_1755193164599_l5tiy784z" src="/uploads/1755193164462-856787-hd_1920_1080_30fps.mp4" loop crossorigin="anonymous" preload="auto"></video>
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse"></a-camera>
+      <a-camera 
+        position="0 0 0" 
+        look-controls="enabled: false" 
+        cursor="fuse: false; rayOrigin: mouse"
+        fov="80"
+        near="0.01"
+        far="1000"
+      ></a-camera>
 
       <a-entity mindar-image-target="targetIndex: 0">
                 <a-entity 
             id="audio-entity-obj_1755193030060_whw0xouqx"
-            position="-0.13 -0.04000000000000001 -0.06" 
-            rotation="0 0 0" 
-            scale="1 1 1"
+            position="-0.390 0.010 -0.180" 
+            rotation="0.0 0.0 0.0" 
+            scale="0.600 0.600 0.600"
             visible="false"
             data-audio-id="asset-obj_1755193030060_whw0xouqx"
           ></a-entity>
         <a-image 
           src="#asset-obj_1755192948755_zdi15vlm7" 
-          position="0 0.1 0.01" 
-          rotation="-90 0 0" 
-          scale="1 1 1"
+          position="0.000 0.310 0.000" 
+          rotation="90.0 0.0 0.0" 
+          scale="0.600 0.600 0.600"
           side="double"
           crossorigin="anonymous"
+          material="transparent: true; alphaTest: 0.1"
         ></a-image>
         <a-video 
           src="#asset-obj_1755193164599_l5tiy784z" 
-          position="0.010000000000000002 0.08000000000000002 0.06999999999999999" 
-          rotation="-90 0 0" 
-          scale="1 1 1"
-          autoplay="true"
+          position="0.030 0.250 0.210" 
+          rotation="90.0 0.0 0.0" 
+          scale="0.600 0.600 0.600"
+          autoplay="false"
+          loop="true"
           data-video-id="asset-obj_1755193164599_l5tiy784z"
           crossorigin="anonymous"
           playsinline
           webkit-playsinline
+          material="transparent: true"
         ></a-video>
       </a-entity>
     </a-scene>

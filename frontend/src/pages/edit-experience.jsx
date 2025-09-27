@@ -19,37 +19,50 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { buildApiUrl } from '@/utils/config.js';
+import { buildApiUrl, API_BASE_URL } from '@/utils/config.js';
 
 export default function EditExperience() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  
+  console.log('EditExperience component loaded with ID:', id);
+  console.log('EditExperience component rendered with ID:', id);
   const [uploadedMindFile, setUploadedMindFile] = useState('');
   const [experienceUrl, setExperienceUrl] = useState();
   const [markerImage, setMarkerImage] = useState('');
   const [transformMode, setTransformMode] = useState('translate');
   const mindFileRef = useRef(null);
-  const [sceneConfig, setSceneConfig] = useState({
-    position: { x: 0, y: 0, z: 1 },
-    rotation: { x: 0, y: 0, z: 0 },
-    scale: { x: 1, y: 1, z: 1 },
-    sceneObjects: [],
-  });
+  const [sceneConfig, setSceneConfig] = useState(null); // Start with null to prevent initial rendering
+
+  // Add unmount tracking
+  useEffect(() => {
+    console.log('EditExperience component mounted with ID:', id);
+    return () => {
+      console.log('EditExperience component unmounting for ID:', id);
+    };
+  }, [id]);
 
   // Fetch existing experience data
-  const { data: experience, isLoading } = useQuery({
+  const { data: experience, isLoading, error } = useQuery({
     queryKey: ['experience', id],
     queryFn: async () => {
+      console.log('Fetching experience with ID:', id);
       const response = await fetch(buildApiUrl(`/api/experiences/${id}`), {
         credentials: 'include',
       });
-      if (!response.ok) throw new Error('Failed to fetch experience');
+      console.log('Response status:', response.status);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Fetch error:', errorText);
+        throw new Error(`Failed to fetch experience: ${response.status} ${errorText}`);
+      }
       const result = await response.json();
       console.log('Fetched experience data:', result);
       return result.data?.experience || result.experience || result;
     },
     enabled: !!id,
+    retry: 1, // Only retry once
   });
 
   const form = useForm({
@@ -73,6 +86,8 @@ export default function EditExperience() {
       console.log('Loading experience into edit mode:', {
         id: experience.id,
         title: experience.title,
+        markerImage: experience.markerImage,
+        mindFile: experience.mindFile,
         contentConfig: experience.contentConfig,
         sceneObjectsCount: experience.contentConfig.sceneObjects?.length || 0,
         sceneObjects: experience.contentConfig.sceneObjects,
@@ -87,17 +102,36 @@ export default function EditExperience() {
       });
 
       // Set marker image for SceneEditor
-      setMarkerImage(experience.markerImage);
+      let markerImageUrl = '';
+      if (experience.markerImage) {
+        if (experience.markerImage.startsWith('data:image/')) {
+          // It's a base64 data URL, use directly
+          markerImageUrl = experience.markerImage;
+        } else {
+          // It's stored data, request from server endpoint
+          markerImageUrl = `${API_BASE_URL}/api/experiences/markers/${experience.id}.png`;
+        }
+      }
+      
+      console.log('Setting marker image URL:', markerImageUrl);
+      console.log('Original marker image from experience:', experience.markerImage);
+      console.log('Experience ID:', experience.id);
+      setMarkerImage(markerImageUrl);
 
-      // Set scene config with existing objects
+      // Set scene config with existing objects - preserve exact saved state
       const newSceneConfig = {
-        position: experience.contentConfig.position || { x: 0, y: 0, z: 1 },
+        position: experience.contentConfig.position || { x: 0, y: 0, z: 0 },
         rotation: experience.contentConfig.rotation || { x: 0, y: 0, z: 0 },
-        scale: experience.contentConfig.scale || { x: 1, y: 1, z: 1 },
+        scale: experience.contentConfig.scale || { x: 0.3, y: 0.3, z: 0.3 },
         sceneObjects: experience.contentConfig.sceneObjects || [],
       };
 
-      console.log('Setting scene config with objects:', newSceneConfig);
+      console.log('Setting scene config with preserved state:', {
+        position: newSceneConfig.position,
+        rotation: newSceneConfig.rotation,
+        scale: newSceneConfig.scale,
+        objectCount: newSceneConfig.sceneObjects.length
+      });
       setSceneConfig(newSceneConfig);
 
       // Set mind file name if it exists
@@ -114,18 +148,20 @@ export default function EditExperience() {
     if (markerImage) {
       form.setValue('markerImage', markerImage);
     }
-  }, [markerImage, form]);
+  }, [markerImage]); // Remove 'form' from dependencies to prevent loops
 
-  // Update form when scene config changes
+  // Update form when scene config changes (but only if it's not the initial load)
   useEffect(() => {
-    console.log('Scene config changed:', sceneConfig);
-    form.setValue('contentConfig', {
-      position: sceneConfig.position,
-      rotation: sceneConfig.rotation,
-      scale: sceneConfig.scale,
-      sceneObjects: sceneConfig.sceneObjects,
-    });
-  }, [sceneConfig, form]);
+    if (sceneConfig) {
+      console.log('Scene config changed - updating form:', sceneConfig);
+      form.setValue('contentConfig', {
+        position: sceneConfig.position,
+        rotation: sceneConfig.rotation,
+        scale: sceneConfig.scale,
+        sceneObjects: sceneConfig.sceneObjects,
+      });
+    }
+  }, [sceneConfig]); // Remove 'form' from dependencies to prevent loops
 
   const updateMutation = useMutation({
     mutationFn: async (data) => {
@@ -139,7 +175,13 @@ export default function EditExperience() {
       const formData = new FormData();
       formData.append('title', data.title);
       formData.append('description', data.description);
-      formData.append('markerImage', data.markerImage);
+      
+      // Only append marker image if it's a new upload (data URL) or if it was changed
+      if (data.markerImage && data.markerImage.startsWith('data:image/')) {
+        formData.append('markerImage', data.markerImage);
+      }
+      // Don't send markerImage if it's just the constructed URL from existing data
+      
       formData.append('contentConfig', JSON.stringify(data.contentConfig));
 
       // Only append mind file if a new one was uploaded
@@ -163,6 +205,7 @@ export default function EditExperience() {
       toast({ title: 'Experience updated successfully' });
       queryClient.invalidateQueries({ queryKey: ['experiences'] });
       queryClient.invalidateQueries({ queryKey: ['experience', id] });
+      queryClient.invalidateQueries({ queryKey: ['userExperiences'] });
       setExperienceUrl(data.data?.experienceUrl || data.experienceUrl);
     },
     onError: (error) => {
@@ -186,7 +229,7 @@ export default function EditExperience() {
       sceneObjects: data.contentConfig.sceneObjects,
     });
 
-    if (!sceneConfig.sceneObjects?.length) {
+    if (!sceneConfig?.sceneObjects?.length) {
       toast({
         title: 'Please add at least one object to the scene',
         variant: 'destructive',
@@ -228,6 +271,30 @@ export default function EditExperience() {
     );
   }
 
+  if (error) {
+    return (
+      <div className='flex flex-col bg-slate-800 h-screen'>
+        <div className='flex items-center justify-center h-full'>
+          <div className='text-center text-white'>
+            <h2 className='text-xl font-semibold mb-2 text-red-400'>Error Loading Experience</h2>
+            <p className='text-slate-400 mb-4'>
+              {error.message || 'Failed to load experience data'}
+            </p>
+            <div className='flex gap-2 justify-center'>
+              <Button onClick={() => navigate('/experiences')} variant='outline'>
+                <ArrowLeft className='h-4 w-4 mr-2' />
+                Back to Experiences
+              </Button>
+              <Button onClick={() => window.location.reload()}>
+                Try Again
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!experience) {
     return (
       <div className='flex flex-col bg-slate-800 h-screen'>
@@ -263,7 +330,7 @@ export default function EditExperience() {
           <div>
             <h1 className='text-xl font-bold text-white'>Edit AR Experience</h1>
             <p className='text-sm text-slate-400'>
-              {experience.title} - {sceneConfig.sceneObjects.length} objects
+              {experience?.title || 'Loading...'} - {sceneConfig?.sceneObjects?.length || 0} objects
               loaded
             </p>
           </div>
@@ -286,16 +353,23 @@ export default function EditExperience() {
 
       <Form {...form}>
         <form onSubmit={handleFormSubmit} className='h-full flex flex-col'>
-          <SceneEditor
-            markerImage={markerImage}
-            config={sceneConfig}
-            onChange={setSceneConfig}
-            onMindFileUpload={handleMindFileUpload}
-            onMarkerImageUpload={setMarkerImage}
-            transformMode={transformMode}
-            uploadedMindFile={uploadedMindFile}
-            form={form}
-          />
+          {sceneConfig ? (
+            <SceneEditor
+              markerImage={markerImage}
+              config={sceneConfig}
+              onChange={setSceneConfig}
+              onMindFileUpload={handleMindFileUpload}
+              onMarkerImageUpload={setMarkerImage}
+              transformMode={transformMode}
+              setTransformMode={setTransformMode}
+              uploadedMindFile={uploadedMindFile}
+              form={form}
+            />
+          ) : (
+            <div className='flex-1 flex items-center justify-center bg-slate-800'>
+              <div className='text-white text-lg'>Loading experience data...</div>
+            </div>
+          )}
         </form>
       </Form>
 
@@ -304,21 +378,22 @@ export default function EditExperience() {
         open={!!experienceUrl}
         onOpenChange={() => setExperienceUrl(undefined)}
       >
-        <DialogContent>
+        <DialogContent className='bg-slate-800 border-slate-700'>
           <DialogHeader>
-            <DialogTitle>Experience Updated Successfully!</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className='text-white'>Experience Updated Successfully!</DialogTitle>
+            <DialogDescription className='text-slate-400'>
               Your AR experience has been updated. Use the link below to access
               it:
             </DialogDescription>
           </DialogHeader>
           <div className='flex flex-col gap-4'>
-            <div className='p-4 bg-muted rounded-lg break-all'>
-              <code>{window.location.origin + experienceUrl}</code>
+            <div className='p-4 bg-slate-700 rounded-lg break-all'>
+              <code className='text-slate-300'>{window.location.origin + experienceUrl}</code>
             </div>
             <div className='flex justify-end gap-2'>
               <Button
                 variant='outline'
+                className='border-slate-600 text-slate-300 hover:bg-slate-700'
                 onClick={() => {
                   navigator.clipboard.writeText(
                     window.location.origin + experienceUrl
@@ -329,6 +404,7 @@ export default function EditExperience() {
                 Copy Link
               </Button>
               <Button
+                className='bg-blue-600 hover:bg-blue-700 text-white'
                 onClick={() => {
                   const title = form.getValues('title');
                   if (experienceUrl) {

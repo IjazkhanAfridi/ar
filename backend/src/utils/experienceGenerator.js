@@ -10,55 +10,333 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ---------------------------------------------------------------------------
-// Transformation Configuration
+// Transformation Configuration - IMPROVED FOR ACCURATE POSITIONING
 // ---------------------------------------------------------------------------
-// You can tune the spatial mapping between the authoring UI coordinate system
-// and the live MindAR coordinate system using environment variables:
-//   AR_POSITION_SCALE   -> multiplies every x,y,z (default 0.1 to reduce "floating")
-//   AR_FLATTEN_IMAGES   -> if 'true' rotates images & videos to lie on the marker
-//   AR_IMAGE_Z_OFFSET   -> small offset (default 0.01) to avoid z-fighting when flattened
-//   AR_AUTO_FIX_ROT_X   -> if 'true' and flatten disabled, will rotate images/videos
-//                           by -90deg on X ONLY when all rotation values are 0
-// These defaults aim to fix reported issues where media appeared far above
-// (because 1 unit = 1 meter in A-Frame) and with an unexpected angle.
-// Adjust in a .env file if needed and regenerate HTML (see regenerate-html.js).
-const POSITION_SCALE = parseFloat(process.env.AR_POSITION_SCALE || '0.1');
-const FLATTEN_IMAGES = (process.env.AR_FLATTEN_IMAGES || 'true').toLowerCase() === 'true';
-const IMAGE_Z_OFFSET = parseFloat(process.env.AR_IMAGE_Z_OFFSET || '0.01');
-const AUTO_FIX_ROT_X = (process.env.AR_AUTO_FIX_ROT_X || 'true').toLowerCase() === 'true';
+// Configuration for accurate AR positioning and user-controlled transforms
+const POSITION_SCALE = parseFloat(process.env.AR_POSITION_SCALE || '0.5'); // Optimized scale for AR space
+const Y_OFFSET_FOR_VISIBILITY = parseFloat(process.env.AR_Y_OFFSET || '0.02'); // Minimum height above marker
+const DEBUG_TRANSFORMS = (process.env.AR_DEBUG_TRANSFORMS || 'true').toLowerCase() === 'true'; // Enable transform debugging
 
-function transformPlacement(obj) {
-  // Original values (assume numbers)
+// 3D Model specific rotation adjustments (in radians)
+const MODEL_ROTATION_OFFSET_X = parseFloat(process.env.AR_MODEL_ROTATION_X || '0'); // Additional X rotation for 3D models
+const MODEL_ROTATION_OFFSET_Y = parseFloat(process.env.AR_MODEL_ROTATION_Y || '0'); // Additional Y rotation for 3D models  
+const MODEL_ROTATION_OFFSET_Z = parseFloat(process.env.AR_MODEL_ROTATION_Z || '0'); // Additional Z rotation for 3D models
+
+// Enhanced position and scale configuration
+const AR_POSITION_SCALE_FACTOR = parseFloat(process.env.AR_POSITION_SCALE_FACTOR || '0.5');
+const AR_SCALE_FACTOR_IMAGE = parseFloat(process.env.AR_SCALE_FACTOR_IMAGE || '0.8');
+const AR_SCALE_FACTOR_MODEL = parseFloat(process.env.AR_SCALE_FACTOR_MODEL || '0.9');
+const AR_SCALE_FACTOR_VIDEO = parseFloat(process.env.AR_SCALE_FACTOR_VIDEO || '0.8');
+const AR_USE_MARKER_SCALING = (process.env.AR_USE_MARKER_SCALING || 'true').toLowerCase() === 'true';
+const AR_MARKER_BASELINE_SIZE = parseFloat(process.env.AR_MARKER_BASELINE_SIZE || '200');
+
+function transformPlacement(obj, markerDimensions = null) {
+  // Original values from the creation experience (frontend sends in radians and AR units)
   let { x, y, z } = obj.position || { x: 0, y: 0, z: 0 };
   let { x: rx, y: ry, z: rz } = obj.rotation || { x: 0, y: 0, z: 0 };
+  let { x: sx, y: sy, z: sz } = obj.scale || { x: 1, y: 1, z: 1 };
 
-  // Scale down positions to avoid large meter offsets
-  x *= POSITION_SCALE;
-  y *= POSITION_SCALE;
-  z *= POSITION_SCALE;
-
-  const isMedia = obj.content && ['image', 'video'].includes(obj.content.type);
-
-  // Flatten images/videos onto marker plane if requested
-  if (isMedia && FLATTEN_IMAGES) {
-    // If user already specified a non-zero rotation.x we respect it
-    if (Math.abs(rx) < 0.0001) {
-      rx = -90; // Lay flat on marker (MindAR target plane is XY)
-    }
-    // When flattened, move slightly up in Z to avoid z-fighting
-    if (Math.abs(z) < 0.0001) {
-      z = IMAGE_Z_OFFSET;
-    }
-  } else if (isMedia && AUTO_FIX_ROT_X && !FLATTEN_IMAGES) {
-    // If not flattening globally but rotation is exactly zero (likely unconfigured)
-    // and user expects upright billboard, leave as is; else we could add heuristics.
-    // Current heuristic: do nothing (placeholder for future logic)
+  if (DEBUG_TRANSFORMS) {
+    console.log(`[DEBUG] Original transform for ${obj.content?.type}:`, {
+      position: { x, y, z },
+      rotation: { rx, ry, rz },
+      scale: { sx, sy, sz }
+    });
   }
 
+  // ---------------------------------------------------------------------------
+  // COORDINATE SYSTEM TRANSFORMATION
+  // ---------------------------------------------------------------------------
+  // Creation view: Camera at [2,2,2] looking down at [0,0,0]
+  // AR view: Camera at [0,0,0] looking forward along Z-axis
+  // We need to transform coordinates to maintain the same visual relationship
+
+  // Transform from creation coordinate system to AR coordinate system
+  // Creation: Y-up, looking down from above
+  // AR: Z-forward, Y-up, looking straight ahead
+
+  // Store original values for reference
+  const originalX = x, originalY = y, originalZ = z;
+  const originalRx = rx, originalRy = ry, originalRz = rz;
+
+  // ---------------------------------------------------------------------------
+  // POSITION TRANSFORMATION - PRESERVE SPATIAL RELATIONSHIPS
+  // ---------------------------------------------------------------------------
+  // The goal is to maintain the exact spatial relationships from creation view in AR view
+  // Creation view has objects positioned in a 3D space that needs to map to AR marker space
+  
+  // Calculate marker-relative scale based on marker dimensions (if available)
+  let markerScale = 1.0;
+  if (markerDimensions && markerDimensions.width && markerDimensions.height) {
+    // Use marker dimensions to create appropriate scaling
+    // Typical marker is ~100-200px, we want objects to fit reasonably in AR space
+    const markerSizeInMeters = Math.min(markerDimensions.width, markerDimensions.height) / 1000; // Convert px to approximate meters
+    markerScale = Math.max(0.1, Math.min(1.0, markerSizeInMeters)); // Clamp between 0.1 and 1.0
+  }
+  
+  // Apply position scaling that preserves relationships
+  // Use configurable scale factor to maintain user-intended positioning
+  const AR_POSITION_SCALE = AR_POSITION_SCALE_FACTOR * markerScale; // Use configurable scale
+  
+  // CRITICAL FIX: Preserve marker-centered coordinate system
+  // In creation: (0,0,0) = marker center, user moves objects relative to this center
+  // In AR: (0,0,0) = marker center, objects should appear exactly where user placed them
+  
+  // Apply minimal scaling to fit AR marker space while preserving relationships
+  x *= AR_POSITION_SCALE;
+  z *= AR_POSITION_SCALE;
+  
+  // Y-axis: preserve height relationships but ensure objects are above marker surface
+  y = (y * AR_POSITION_SCALE) + 0.02; // Preserve Y relationships + small offset above marker
+  
+  // Marker-based position adjustment if marker dimensions are available
+  if (markerDimensions && markerDimensions.width && markerDimensions.height) {
+    // Normalize position based on marker aspect ratio to handle rectangular markers properly
+    const markerAspect = markerDimensions.width / markerDimensions.height;
+    
+    if (markerAspect > 1) {
+      // Wide marker: scale X positions more
+      x *= markerAspect * 0.5;
+    } else {
+      // Tall marker: scale Z positions more  
+      z *= (1 / markerAspect) * 0.5;
+    }
+  }
+  
+  if (DEBUG_TRANSFORMS) {
+    console.log(`[DEBUG] Position transform for ${obj.content?.type}:`, {
+      original: { x: originalX.toFixed(3), y: originalY.toFixed(3), z: originalZ.toFixed(3) },
+      scale_factor: AR_POSITION_SCALE.toFixed(3),
+      marker_scale: markerScale.toFixed(3),
+      transformed: { x: x.toFixed(3), y: y.toFixed(3), z: z.toFixed(3) }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // ROTATION TRANSFORMATION - COORDINATE SYSTEM CONVERSION
+  // ---------------------------------------------------------------------------
+  // CRITICAL: Transform from creation coordinate system to AR coordinate system
+  // 
+  // Creation View: Camera at [2,2,2] looking down at [0,0,0]
+  //   - Objects face "up" toward the camera (Y+ direction)  
+  //   - When user sets "vertical", object faces upward in 3D space
+  //
+  // AR View: Camera at [0,0,0] looking forward along Z-axis  
+  //   - Objects face "forward" toward the camera (Z- direction)
+  //   - When user set "vertical" in creation, it should stay vertical in AR
+  //
+  // Solution: Apply coordinate system transformation matrix
+
+  // The key insight: Creation camera looks down (-Y), AR camera looks forward (+Z)
+  // We need to rotate the entire coordinate system by 90° around X-axis
+  
+  if (DEBUG_TRANSFORMS) {
+    console.log(`[DEBUG] Original rotation for ${obj.content?.type}:`, {
+      rx_deg: (originalRx * 180/Math.PI).toFixed(1),
+      ry_deg: (originalRy * 180/Math.PI).toFixed(1), 
+      rz_deg: (originalRz * 180/Math.PI).toFixed(1)
+    });
+  }
+  
+  switch (obj.content.type) {
+    case 'image':
+    case 'video':
+      // For media objects, apply coordinate system transformation
+      // Creation: user sees from above, AR: user sees from front
+      
+      // Transform coordinate system: rotate 90° around X to convert Y-up to Z-forward view
+      // This maintains the visual appearance the user intended
+      
+      // Original rotation in creation coordinate system
+      // Convert to AR coordinate system by rotating the reference frame
+      rx = originalRx + Math.PI/2; // Add 90° to X rotation to convert coordinate systems
+      ry = originalRy;             // Y rotation (left/right turn) stays the same
+      rz = originalRz;             // Z rotation (roll/tilt) stays the same
+      
+      // Normalize rotations to [-π, π] range
+      while (rx > Math.PI) rx -= 2 * Math.PI;
+      while (rx < -Math.PI) rx += 2 * Math.PI;
+      
+      break;
+      
+    case 'model':
+      // 3D models require the SAME coordinate system transformation as images/videos
+      // to maintain the visual orientation that the user set during creation
+      
+      if (DEBUG_TRANSFORMS) {
+        console.log(`[DEBUG] 3D Model original rotation:`, {
+          rx_deg: (originalRx * 180/Math.PI).toFixed(1), 
+          ry_deg: (originalRy * 180/Math.PI).toFixed(1), 
+          rz_deg: (originalRz * 180/Math.PI).toFixed(1)
+        });
+      }
+      
+      // Apply the EXACT SAME transformation as images/videos
+      // This ensures consistency across all object types
+      
+      // Transform coordinate system: rotate 90° around X to convert Y-up to Z-forward view
+      rx = originalRx + Math.PI/2 + MODEL_ROTATION_OFFSET_X; // Add 90° + any model-specific offset
+      ry = originalRy + MODEL_ROTATION_OFFSET_Y;             // Y rotation + any model-specific offset
+      rz = originalRz + MODEL_ROTATION_OFFSET_Z;             // Z rotation + any model-specific offset
+      
+      // Normalize rotations to [-π, π] range
+      while (rx > Math.PI) rx -= 2 * Math.PI;
+      while (rx < -Math.PI) rx += 2 * Math.PI;
+      while (ry > Math.PI) ry -= 2 * Math.PI;
+      while (ry < -Math.PI) ry += 2 * Math.PI;
+      while (rz > Math.PI) rz -= 2 * Math.PI;
+      while (rz < -Math.PI) rz += 2 * Math.PI;
+      
+      if (DEBUG_TRANSFORMS) {
+        console.log(`[DEBUG] 3D Model transformed rotation:`, {
+          rx_deg: (rx * 180/Math.PI).toFixed(1), 
+          ry_deg: (ry * 180/Math.PI).toFixed(1), 
+          rz_deg: (rz * 180/Math.PI).toFixed(1),
+          transformation: "Applied +90° X rotation for coordinate system conversion"
+        });
+      }
+      break;
+      
+    case 'light':
+    case 'audio':
+    default:
+      // For lights, audio, and other objects, preserve exact rotation
+      rx = originalRx;
+      ry = originalRy; 
+      rz = originalRz;
+      break;
+  }
+  
+  if (DEBUG_TRANSFORMS) {
+    console.log(`[DEBUG] Transformed rotation for ${obj.content?.type}:`, {
+      rx_deg: (rx * 180/Math.PI).toFixed(1),
+      ry_deg: (ry * 180/Math.PI).toFixed(1),
+      rz_deg: (rz * 180/Math.PI).toFixed(1),
+      transformation: 'Added +90° to X-axis for coordinate system conversion'
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // SCALE TRANSFORMATION - PRESERVE USER-INTENDED SIZING
+  // ---------------------------------------------------------------------------
+  // The key insight: preserve the relative scale relationships the user created
+  // Different object types may need different scale handling
+  
+  let AR_SCALE_FACTOR;
+  
+  switch (obj.content.type) {
+    case 'image':
+      AR_SCALE_FACTOR = AR_SCALE_FACTOR_IMAGE;
+      break;
+      
+    case 'video':
+      AR_SCALE_FACTOR = AR_SCALE_FACTOR_VIDEO;
+      break;
+      
+    case 'model':
+      AR_SCALE_FACTOR = AR_SCALE_FACTOR_MODEL;
+      break;
+      
+    case 'audio':
+      // Audio objects are invisible, scale doesn't matter visually but keep consistent
+      AR_SCALE_FACTOR = 1.0;
+      break;
+      
+    default:
+      AR_SCALE_FACTOR = AR_SCALE_FACTOR_IMAGE; // Default to image scaling
+      break;
+  }
+  
+  // Apply marker-relative scaling if enabled and marker dimensions are available
+  if (AR_USE_MARKER_SCALING && markerDimensions && markerDimensions.width && markerDimensions.height) {
+    // Adjust scale based on marker size - larger markers can support larger objects
+    const markerSizeFactor = Math.min(markerDimensions.width, markerDimensions.height) / AR_MARKER_BASELINE_SIZE;
+    AR_SCALE_FACTOR *= Math.max(0.5, Math.min(1.5, markerSizeFactor)); // Clamp between 0.5x and 1.5x
+  }
+  
+  // Store original scale for debugging
+  const originalSx = sx, originalSy = sy, originalSz = sz;
+  
+  // CRITICAL FIX: Use content dimensions for intelligent scaling
+  let contentBasedScaling = 1.0;
+  
+  if (obj.content && obj.content.dimensions && markerDimensions) {
+    const contentDims = obj.content.dimensions;
+    const markerSize = Math.min(markerDimensions.width, markerDimensions.height);
+    const contentSize = Math.max(contentDims.width || 1, contentDims.height || 1);
+    
+    // Calculate scale factor to make content appropriately sized for marker
+    contentBasedScaling = (markerSize * 0.3) / contentSize; // Content should be ~30% of marker size
+    contentBasedScaling = Math.max(0.1, Math.min(2.0, contentBasedScaling)); // Clamp to reasonable bounds
+    
+    if (DEBUG_TRANSFORMS) {
+      console.log(`[DEBUG] Content-based scaling for ${obj.content.type}:`, {
+        contentSize,
+        markerSize,
+        contentBasedScaling: contentBasedScaling.toFixed(3)
+      });
+    }
+  }
+  
+  // Combine base AR scaling with content-based scaling
+  const finalScaleFactor = AR_SCALE_FACTOR * contentBasedScaling;
+  
+  // Apply final scale transformation
+  sx *= finalScaleFactor;
+  sy *= finalScaleFactor; 
+  sz *= finalScaleFactor;
+  
+  if (DEBUG_TRANSFORMS) {
+    console.log(`[DEBUG] Complete transform for ${obj.content?.type}:`, {
+      original: { 
+        scale: { sx: originalSx.toFixed(3), sy: originalSy.toFixed(3), sz: originalSz.toFixed(3) }
+      },
+      factors: {
+        AR_scale: AR_SCALE_FACTOR.toFixed(3),
+        content_based: contentBasedScaling.toFixed(3),
+        final: finalScaleFactor.toFixed(3)
+      },
+      transformed: { 
+        scale: { sx: sx.toFixed(3), sy: sy.toFixed(3), sz: sz.toFixed(3) }
+      },
+      content_dims: obj.content?.dimensions || 'none',
+      marker_dims: markerDimensions || 'none'
+    });
+  }
+
+  // Ensure minimum Y position for visibility
+  if (Math.abs(y) < 0.001) {
+    y = 0.01; // Small offset above marker
+  }
+
+  // Convert radians to degrees for A-Frame (A-Frame expects degrees)
+  const rotationXDeg = rx * (180 / Math.PI);
+  const rotationYDeg = ry * (180 / Math.PI);
+  const rotationZDeg = rz * (180 / Math.PI);
+
+  // Enhanced debug logging with transformation details
+  console.log(`[DEBUG] Transform for ${obj.content?.type} (ID: ${obj.id}):`, {
+    original: {
+      position: { x: originalX.toFixed(3), y: originalY.toFixed(3), z: originalZ.toFixed(3) },
+      rotation: { 
+        radians: { rx: originalRx.toFixed(3), ry: originalRy.toFixed(3), rz: originalRz.toFixed(3) },
+        degrees: { x: (originalRx * 180/Math.PI).toFixed(1), y: (originalRy * 180/Math.PI).toFixed(1), z: (originalRz * 180/Math.PI).toFixed(1) }
+      }
+    },
+    transformed: {
+      position: { x: x.toFixed(3), y: y.toFixed(3), z: z.toFixed(3) },
+      rotation: { 
+        radians: { rx: rx.toFixed(3), ry: ry.toFixed(3), rz: rz.toFixed(3) },
+        degrees: { x: rotationXDeg.toFixed(1), y: rotationYDeg.toFixed(1), z: rotationZDeg.toFixed(1) }
+      },
+      scale: { sx: sx.toFixed(3), sy: sy.toFixed(3), sz: sz.toFixed(3) }
+    }
+  });
+
   return {
-    positionStr: `${x} ${y} ${z}`,
-    rotationStr: `${rx} ${ry} ${rz}`,
-    scaleStr: `${obj.scale.x} ${obj.scale.y} ${obj.scale.z}`,
+    positionStr: `${x.toFixed(3)} ${y.toFixed(3)} ${z.toFixed(3)}`,
+    rotationStr: `${rotationXDeg.toFixed(1)} ${rotationYDeg.toFixed(1)} ${rotationZDeg.toFixed(1)}`,
+    scaleStr: `${sx.toFixed(3)} ${sy.toFixed(3)} ${sz.toFixed(3)}`,
   };
 }
 
@@ -76,14 +354,15 @@ export function generateExperienceHtml(experience) {
     throw new Error('At least one scene object is required');
   }
 
-  console.log('Generating HTML for experience:', {
+  console.log('Generating AR experience HTML with enhanced positioning:', {
     id: experience.id,
     title: experience.title,
     mindFile: experience.mindFile,
     sceneObjectsCount: experience.contentConfig.sceneObjects.length,
-    audioCount: experience.contentConfig.sceneObjects.filter(
-      (obj) => obj.content.type === 'audio'
-    ).length,
+    mediaTypes: experience.contentConfig.sceneObjects.map(obj => obj.content.type),
+    positionScale: POSITION_SCALE,
+    yOffset: Y_OFFSET_FOR_VISIBILITY,
+    debugMode: DEBUG_TRANSFORMS,
   });
 
   const assets = experience.contentConfig.sceneObjects
@@ -105,9 +384,12 @@ export function generateExperienceHtml(experience) {
     .filter(Boolean)
     .join('\n        ');
 
+  // Extract marker dimensions if available (for better positioning context)
+  const markerDimensions = experience.markerDimensions || null;
+
   const entities = experience.contentConfig.sceneObjects
     .map((obj) => {
-      const { positionStr, rotationStr, scaleStr } = transformPlacement(obj);
+      const { positionStr, rotationStr, scaleStr } = transformPlacement(obj, markerDimensions);
 
       switch (obj.content.type) {
         case 'image':
@@ -118,6 +400,7 @@ export function generateExperienceHtml(experience) {
           scale="${scaleStr}"
           side="double"
           crossorigin="anonymous"
+          material="transparent: true; alphaTest: 0.1"
         ></a-image>`;
 
         case 'video':
@@ -126,11 +409,13 @@ export function generateExperienceHtml(experience) {
           position="${positionStr}" 
           rotation="${rotationStr}" 
           scale="${scaleStr}"
-          autoplay="true"
+          autoplay="false"
+          loop="true"
           data-video-id="asset-${obj.id}"
           crossorigin="anonymous"
           playsinline
           webkit-playsinline
+          material="transparent: true"
         ></a-video>`;
 
         case 'model':
@@ -246,7 +531,14 @@ export function generateExperienceHtml(experience) {
         ${assets}
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse"></a-camera>
+      <a-camera 
+        position="0 0 0" 
+        look-controls="enabled: false" 
+        cursor="fuse: false; rayOrigin: mouse"
+        fov="80"
+        near="0.01"
+        far="1000"
+      ></a-camera>
 
       <a-entity mindar-image-target="targetIndex: 0">
         ${entities}
@@ -283,7 +575,6 @@ export function generateExperienceHtml(experience) {
 
         // Hide loading when AR is ready
         scene.addEventListener('loaded', function() {
-          console.log('AR Scene loaded');
           setTimeout(() => {
             if (loading) {
               loading.style.display = 'none';
@@ -313,7 +604,6 @@ export function generateExperienceHtml(experience) {
           });
 
           arTarget.addEventListener('targetLost', function() {
-            console.log('AR Target lost!');
             // Pause all audios and videos when target is lost
             pauseAudios();
             pauseVideos();
@@ -488,7 +778,6 @@ export function saveExperienceHtml(experience) {
 
   try {
     fs.writeFileSync(filePath, html, 'utf8');
-    console.log(`Experience HTML saved: ${filename}`);
     return `/experiences/${filename}`;
   } catch (error) {
     console.error('Error saving experience HTML:', error);
@@ -543,40 +832,45 @@ export function generateMultipleImageExperienceHtml(experience) {
     const entities = target.sceneObjects
       .map((obj) => {
         const assetId = `target-${targetIndex}-asset-${obj.id}`;
-        const position = `${obj.position.x} ${obj.position.y} ${obj.position.z}`;
-        const rotation = `${obj.rotation.x} ${obj.rotation.y} ${obj.rotation.z}`;
-        const scale = `${obj.scale.x} ${obj.scale.y} ${obj.scale.z}`;
+        // Apply the same transform logic for consistent top-down view
+        const { positionStr, rotationStr, scaleStr } = transformPlacement(obj);
 
         switch (obj.content.type) {
           case 'image':
             return `        <a-image 
             src="#${assetId}" 
-            position="${position}" 
-            rotation="${rotation}" 
-            scale="${scale}"
+            position="${positionStr}" 
+            rotation="${rotationStr}" 
+            scale="${scaleStr}"
+            side="double"
+            crossorigin="anonymous"
           ></a-image>`;
 
           case 'video':
             return `        <a-video 
             src="#${assetId}" 
-            position="${position}" 
-            rotation="${rotation}" 
-            scale="${scale}"
+            position="${positionStr}" 
+            rotation="${rotationStr}" 
+            scale="${scaleStr}"
             autoplay="true"
+            data-video-id="${assetId}"
+            crossorigin="anonymous"
+            playsinline
+            webkit-playsinline
           ></a-video>`;
 
           case 'model':
             return `        <a-entity 
             gltf-model="#${assetId}" 
-            position="${position}" 
-            rotation="${rotation}" 
-            scale="${scale}"
+            position="${positionStr}" 
+            rotation="${rotationStr}" 
+            scale="${scaleStr}"
           ></a-entity>`;
 
           case 'light':
             return `        <a-light 
             type="directional" 
-            position="${position}" 
+            position="${positionStr}" 
             intensity="${obj.content.intensity || 1}"
             color="${obj.content.color || '#ffffff'}"
           ></a-light>`;
@@ -584,9 +878,9 @@ export function generateMultipleImageExperienceHtml(experience) {
           case 'audio':
             return `        <a-entity 
               id="audio-entity-${assetId}"
-              position="${position}" 
-              rotation="${rotation}" 
-              scale="${scale}"
+              position="${positionStr}" 
+              rotation="${rotationStr}" 
+              scale="${scaleStr}"
               visible="false"
               data-audio-id="${assetId}"
             ></a-entity>`;
@@ -683,7 +977,14 @@ ${entities}
         ${allAssets.join('\n        ')}
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse"></a-camera>
+      <a-camera 
+        position="0 0 0" 
+        look-controls="enabled: false" 
+        cursor="fuse: false; rayOrigin: mouse"
+        fov="80"
+        near="0.01"
+        far="1000"
+      ></a-camera>
 
 ${allTargets.join('\n\n')}
     </a-scene>
@@ -702,7 +1003,6 @@ ${allTargets.join('\n\n')}
 
         // Hide loading when AR is ready
         scene.addEventListener('loaded', function() {
-          console.log('Multiple Image AR Scene loaded');
           setTimeout(() => {
             if (loading) {
               loading.style.display = 'none';
@@ -722,7 +1022,6 @@ ${allTargets.join('\n\n')}
           });
 
           target.addEventListener('targetLost', function() {
-            console.log('AR Target', index, 'lost!');
           });
         });
 

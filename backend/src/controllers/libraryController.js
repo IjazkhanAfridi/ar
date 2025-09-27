@@ -7,7 +7,6 @@ class LibraryController {
    */
   getModelsLibrary = asyncHandler(async (req, res) => {
     const models = await experienceService.getModelsLibrary();
-    console.log('Fetched models for library:', models.length);
     res.json(models); // Return array directly, not wrapped
   });
 
@@ -16,7 +15,6 @@ class LibraryController {
    */
   getImagesLibrary = asyncHandler(async (req, res) => {
     const images = await experienceService.getImagesLibrary();
-    console.log('Fetched images for library:', images.length);
     res.json(images); // Return array directly, not wrapped
   });
 
@@ -25,7 +23,6 @@ class LibraryController {
    */
   getVideosLibrary = asyncHandler(async (req, res) => {
     const videos = await experienceService.getVideosLibrary();
-    console.log('Fetched videos for library:', videos.length);
     res.json(videos); // Return array directly, not wrapped
   });
 
@@ -34,7 +31,6 @@ class LibraryController {
    */
   getAudioLibrary = asyncHandler(async (req, res) => {
     const audios = await experienceService.getAudioLibrary();
-    console.log('Fetched audios for library:', audios.length);
     res.json(audios); // Return array directly, not wrapped
   });
 }

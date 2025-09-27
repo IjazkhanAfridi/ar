@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation,useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
@@ -19,18 +19,20 @@ import {
 } from '@/components/ui/dialog';
 
 export default function Create() {
+  const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
   const mindFileRef = useRef(null);
   const [markerImage, setMarkerImage] = useState();
+  const [markerDimensions, setMarkerDimensions] = useState(null);
   const [showARViewer, setShowARViewer] = useState(false);
   const [transformMode, setTransformMode] = useState('translate');
   const [uploadedMindFile, setUploadedMindFile] = useState();
   const [experienceUrl, setExperienceUrl] = useState();
   const [sceneConfig, setSceneConfig] = useState({
-    position: { x: 0, y: 0, z: 1 },
+    position: { x: 0, y: 0, z: 0 },
     rotation: { x: 0, y: 0, z: 0 },
-    scale: { x: 1, y: 1, z: 1 },
+    scale: { x: 0.3, y: 0.3, z: 0.3 },
     sceneObjects: [],
   });
 
@@ -40,20 +42,41 @@ export default function Create() {
       title: '',
       description: '',
       markerImage: '',
+      markerDimensions: null,
       contentConfig: {
-        position: { x: 0, y: 0, z: 1 },
+        position: { x: 0, y: 0, z: 0 },
         rotation: { x: 0, y: 0, z: 0 },
-        scale: { x: 1, y: 1, z: 1 },
+        scale: { x: 0.3, y: 0.3, z: 0.3 },
         sceneObjects: [],
       },
     },
   });
 
+  // Handle marker image upload with dimensions
+  const handleMarkerImageUpload = (markerData) => {
+    if (typeof markerData === 'string') {
+      // Old format - just the data URL
+      setMarkerImage(markerData);
+      form.setValue('markerImage', markerData);
+    } else {
+      // New format - object with dataUrl and dimensions
+      setMarkerImage(markerData.dataUrl);
+      setMarkerDimensions(markerData.dimensions);
+      form.setValue('markerImage', markerData.dataUrl);
+      form.setValue('markerDimensions', markerData.dimensions);
+      
+      console.log('[DEBUG] Marker dimensions captured:', markerData.dimensions);
+    }
+  };
+
   useEffect(() => {
     if (markerImage) {
       form.setValue('markerImage', markerImage);
     }
-  }, [markerImage, form]);
+    if (markerDimensions) {
+      form.setValue('markerDimensions', markerDimensions);
+    }
+  }, [markerImage, markerDimensions, form]);
 
   useEffect(() => {
     form.setValue('contentConfig', {
@@ -70,6 +93,9 @@ export default function Create() {
       formData.append('title', data.title);
       formData.append('description', data.description);
       formData.append('markerImage', data.markerImage);
+      if (data.markerDimensions) {
+        formData.append('markerDimensions', JSON.stringify(data.markerDimensions));
+      }
       formData.append('contentConfig', JSON.stringify(data.contentConfig));
 
       if (!mindFileRef.current) {
@@ -80,7 +106,7 @@ export default function Create() {
       const response = await fetch(buildApiUrl('/api/experiences'), {
         method: 'POST',
         body: formData,
-        credentials: 'include', // Add credentials for authentication
+        credentials: 'include', 
       });
 
       if (!response.ok) {
@@ -90,9 +116,16 @@ export default function Create() {
       return response.json();
     },
     onSuccess: (data) => {
+      console.log('Create experience response:', data);
       toast({ title: 'Experience created successfully' });
       setExperienceUrl(data.experienceUrl);
-      redirectToARSuccess(data.experienceUrl, data.title);
+      
+      // Access the data from the response structure
+      const experienceUrl = data.data?.experienceUrl || data.experienceUrl;
+      const title = data.data?.experience?.title || data.title;
+      
+      console.log('Extracted data:', { experienceUrl, title });
+      redirectToARSuccess(experienceUrl, title);
     },
     onError: (error) => {
       toast({
@@ -105,9 +138,21 @@ export default function Create() {
   });
 
   const redirectToARSuccess = (experienceUrl, projectNumber) => {
-    navigate('/ar-success', {
-      state: { experienceUrl, projectNumber },
+    console.log('Redirecting to AR Success with:', { experienceUrl, projectNumber });
+    
+    // experienceUrl comes as "/experiences/44.html" from backend
+    const fullExperienceUrl = experienceUrl 
+      ? `${buildApiUrl('')}${experienceUrl}` 
+      : '';
+      
+    console.log('Full experience URL:', fullExperienceUrl);
+    
+    // Create URL with query parameters
+    const params = new URLSearchParams({
+      experienceUrl: fullExperienceUrl,
+      projectNumber: projectNumber || 'generated'
     });
+    navigate(`/ar-success?${params.toString()}`);
   };
 
   const handleMindFileUpload = async (file) => {
@@ -155,6 +200,7 @@ export default function Create() {
     e.preventDefault();
     e.stopPropagation();
     form.handleSubmit(onSubmit)();
+    navigate('/');
   };
 
   useEffect(() => {
@@ -194,8 +240,9 @@ export default function Create() {
             config={sceneConfig}
             onChange={setSceneConfig}
             onMindFileUpload={handleMindFileUpload}
-            onMarkerImageUpload={setMarkerImage}
+            onMarkerImageUpload={handleMarkerImageUpload}
             transformMode={transformMode}
+            setTransformMode={setTransformMode}
             uploadedMindFile={uploadedMindFile}
             form={form}
           />
@@ -221,39 +268,25 @@ export default function Create() {
         </Button>
       </div>
 
-      {/* Preview AR Button - Bottom Center */}
-      {uploadedMindFile &&
-        markerImage &&
-        sceneConfig.sceneObjects?.length > 0 && (
-          <div className='fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40'>
-            <Button
-              type='button'
-              onClick={() => setShowARViewer(true)}
-              className='h-12 px-6 text-md font-medium bg-green-600 hover:bg-green-700 shadow-xl border-2 border-green-500 transition-all duration-200 hover:scale-105'
-            >
-              Preview AR
-            </Button>
-          </div>
-        )}
-
       <Dialog
         open={!!experienceUrl}
         onOpenChange={() => setExperienceUrl(undefined)}
       >
-        <DialogContent>
+        <DialogContent className='bg-slate-800 border-slate-700'>
           <DialogHeader>
-            <DialogTitle>Experience Created Successfully!</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className='text-white'>Experience Created Successfully!</DialogTitle>
+            <DialogDescription className='text-slate-400'>
               Your AR experience is now ready. Use the link below to access it:
             </DialogDescription>
           </DialogHeader>
           <div className='flex flex-col gap-4'>
-            <div className='p-4 bg-muted rounded-lg break-all'>
-              <code>{window.location.origin + experienceUrl}</code>
+            <div className='p-4 bg-slate-700 rounded-lg break-all'>
+              <code className='text-slate-300'>{window.location.origin + experienceUrl}</code>
             </div>
             <div className='flex justify-end gap-2'>
               <Button
                 variant='outline'
+                className='border-slate-600 text-slate-300 hover:bg-slate-700'
                 onClick={() => {
                   navigator.clipboard.writeText(
                     window.location.origin + experienceUrl
@@ -264,6 +297,7 @@ export default function Create() {
                 Copy Link
               </Button>
               <Button
+                className='bg-blue-600 hover:bg-blue-700 text-white'
                 onClick={() =>
                   window.open(window.location.origin + experienceUrl, '_blank')
                 }

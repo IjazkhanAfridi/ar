@@ -9,7 +9,7 @@ class ExperienceController {
    * Create a new AR experience
    */
   createExperience = asyncHandler(async (req, res) => {
-    const { title, description, contentConfig, markerImage } = req.body;
+    const { title, description, contentConfig, markerImage, markerDimensions } = req.body;
     const userId = req.user.id;
 
     // Validation
@@ -40,6 +40,18 @@ class ExperienceController {
 
     // Handle marker image - expect base64 data in body (like working version)
     let markerImageUrl = '';
+    let originalDimensions = null;
+
+    // Check if marker dimensions were provided by frontend
+    if (markerDimensions) {
+      try {
+        originalDimensions = typeof markerDimensions === 'string' 
+          ? JSON.parse(markerDimensions) 
+          : markerDimensions;
+      } catch (error) {
+        console.warn('Could not parse frontend marker dimensions:', error.message);
+      }
+    }
 
     if (!markerImage) {
       return res.status(400).json({
@@ -53,16 +65,39 @@ class ExperienceController {
       const base64Data = markerImage.split(',')[1];
       const markerImageBuffer = Buffer.from(base64Data, 'base64');
 
-      // Save marker image buffer to file
+      // Get original image dimensions before processing (if not already provided)
+      if (!originalDimensions) {
+        try {
+          const Sharp = (await import('sharp')).default;
+          const metadata = await Sharp(markerImageBuffer).metadata();
+          originalDimensions = {
+            width: metadata.width,
+            height: metadata.height,
+            aspectRatio: metadata.width / metadata.height
+          };
+          console.log('[DEBUG] Extracted marker dimensions from image:', originalDimensions);
+        } catch (error) {
+          console.warn('Could not extract marker dimensions:', error.message);
+        }
+      } else {
+      }
+
+      // Save marker image buffer to file (preserve original dimensions if possible)
       const savedFile = await fileService.saveFile(
         markerImageBuffer,
         `marker-${Date.now()}.png`,
         {
           processImage: true,
-          imageOptions: { width: 1024, height: 1024, quality: 90 },
+          imageOptions: { 
+            width: originalDimensions?.width || 1024, 
+            height: originalDimensions?.height || 1024, 
+            quality: 90,
+            fit: 'contain' // Preserve aspect ratio
+          },
         }
       );
       markerImageUrl = savedFile.url;
+
     } else {
       return res.status(400).json({
         success: false,
@@ -70,7 +105,7 @@ class ExperienceController {
       });
     }
 
-    // Parse content config if it's a string
+    // Parse content config if it's a string FIRST
     let parsedContentConfig;
     try {
       parsedContentConfig =
@@ -84,10 +119,16 @@ class ExperienceController {
       });
     }
 
+    // Store marker dimensions in experience data (after parsing contentConfig)
+    if (originalDimensions) {
+      parsedContentConfig.markerDimensions = originalDimensions;
+    }
+
     const experienceData = {
       title,
       description,
       markerImage: markerImageUrl,
+      markerDimensions: parsedContentConfig.markerDimensions,
       contentConfig: parsedContentConfig,
     };
 
@@ -95,6 +136,14 @@ class ExperienceController {
       experienceData,
       userId
     );
+
+    if (!experience || !experience.id) {
+      console.error('Failed to create experience or missing ID');
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create experience'
+      });
+    }
 
     // Save the mind file immediately after creating the experience (like working version)
     console.log('Saving mind file for experience ID:', experience.id);
@@ -117,7 +166,6 @@ class ExperienceController {
       updatedExperience.id
     );
 
-    console.log('Experience created successfully with mind file');
 
     res.status(201).json({
       success: true,
@@ -285,7 +333,6 @@ class ExperienceController {
 
     // If a new mind file was uploaded, save it
     if (mindFile) {
-      console.log('Saving new mind file for experience ID:', id);
       await experienceService.saveMindFile(parseInt(id), mindFile.buffer);
     }
 

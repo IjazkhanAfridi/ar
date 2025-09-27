@@ -18,7 +18,6 @@ import ConvertedImage from './pages/ConvertedImage';
 import ARSuccessPage from './pages/ARSuccessPage';
 import AdminDashboard from './pages/admin-dashboard';
 import EditExperience from './pages/edit-experience';
-import { SceneConfigProvider } from './contexts/SceneConfigContext';
 import MultipleImageTracking from './pages/MultipleImageTracking';
 import MultipleImageConfirmation from './pages/MultipleImageConfirmation';
 import MultipleImageCreate from './pages/MultipleImageCreate';
@@ -26,10 +25,9 @@ import MultipleImageCreate from './pages/MultipleImageCreate';
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <SceneConfigProvider>
-        <main className='min-h-screen bg-background'>
-          <BrowserRouter>
-            <Routes>
+      <main className='min-h-screen bg-slate-900 text-white'>
+        <BrowserRouter>
+          <Routes>
               {/* Public routes */}
               <Route path='/login' element={<Login />} />
               <Route path='/register' element={<Register />} />
@@ -63,7 +61,7 @@ export default function App() {
               <Route
                 path='/edit-experience/:id'
                 element={
-                  <ProtectedRoute restrictAdmin>
+                  <ProtectedRoute>
                     <EditExperience />
                   </ProtectedRoute>
                 }
@@ -144,11 +142,10 @@ export default function App() {
               />
 
               <Route path='*' element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </main>
-        <Toaster />
-      </SceneConfigProvider>
+          </Routes>
+        </BrowserRouter>
+      </main>
+      <Toaster />
     </QueryClientProvider>
   );
 }

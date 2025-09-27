@@ -59,7 +59,6 @@ router.post('/', upload.single('file'), async (req, res) => {
       createdAt: new Date(),
     };
 
-    console.log('Content file saved:', contentFile);
     res.json(contentFile);
   } catch (error) {
     console.error('Error uploading content:', error);

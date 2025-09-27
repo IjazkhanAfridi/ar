@@ -66,13 +66,13 @@ export default function LoginPage() {
   };
 
   return (
-    <div className='min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8'>
-      <Card className='w-full max-w-md'>
+    <div className='min-h-screen flex items-center justify-center bg-slate-900 py-12 px-4 sm:px-6 lg:px-8'>
+      <Card className='w-full max-w-md bg-slate-800 border-slate-700'>
         <CardHeader className='space-y-1'>
-          <CardTitle className='text-2xl font-bold text-center'>
+          <CardTitle className='text-2xl font-bold text-center text-white'>
             Welcome Back
           </CardTitle>
-          <CardDescription className='text-center'>
+          <CardDescription className='text-center text-slate-400'>
             Sign in to your AR Configurator account
           </CardDescription>
         </CardHeader>
@@ -86,34 +86,34 @@ export default function LoginPage() {
             )}
 
             <div className='space-y-2'>
-              <Label htmlFor='email'>Email</Label>
+              <Label htmlFor='email' className='text-white'>Email</Label>
               <Input
                 id='email'
                 type='email'
                 placeholder='Enter your email'
                 {...register('email')}
-                className={errors.email ? 'border-red-500' : ''}
+                className={`bg-slate-700 border-slate-600 text-white placeholder-slate-400 ${errors.email ? 'border-red-500' : ''}`}
               />
               {errors.email && (
-                <p className='text-sm text-red-600'>{errors.email.message}</p>
+                <p className='text-sm text-red-400'>{errors.email.message}</p>
               )}
             </div>
 
             <div className='space-y-2'>
-              <Label htmlFor='password'>Password</Label>
+              <Label htmlFor='password' className='text-white'>Password</Label>
               <div className='relative'>
                 <Input
                   id='password'
                   type={showPassword ? 'text' : 'password'}
                   placeholder='Enter your password'
                   {...register('password')}
-                  className={errors.password ? 'border-red-500' : ''}
+                  className={`bg-slate-700 border-slate-600 text-white placeholder-slate-400 ${errors.password ? 'border-red-500' : ''}`}
                 />
                 <Button
                   type='button'
                   variant='ghost'
                   size='sm'
-                  className='absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent'
+                  className='absolute right-0 top-0 h-full px-3 py-2 hover:bg-slate-600 text-slate-400'
                   onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? (
@@ -127,7 +127,7 @@ export default function LoginPage() {
                 </Button>
               </div>
               {errors.password && (
-                <p className='text-sm text-red-600'>
+                <p className='text-sm text-red-400'>
                   {errors.password.message}
                 </p>
               )}
@@ -135,7 +135,11 @@ export default function LoginPage() {
           </CardContent>
 
           <CardFooter className='flex flex-col space-y-4'>
-            <Button type='submit' className='w-full' disabled={isLoading}>
+            <Button 
+              type='submit' 
+              className='w-full bg-blue-600 hover:bg-blue-700 text-white' 
+              disabled={isLoading}
+            >
               {isLoading ? (
                 <>
                   <Loader2 className='mr-2 h-4 w-4 animate-spin' />
@@ -146,19 +150,19 @@ export default function LoginPage() {
               )}
             </Button>
 
-            <div className='text-center text-sm text-gray-600'>
+            <div className='text-center text-sm text-slate-400'>
               <p>
                 Don't have an account?{' '}
                 <Link
                   to='/register'
-                  className='font-medium text-primary hover:text-primary/90 underline'
+                  className='font-medium text-blue-400 hover:text-blue-300 underline'
                 >
                   Create one now
                 </Link>
               </p>
             </div>
 
-            <div className='text-center text-sm text-gray-500'>
+            <div className='text-center text-sm text-slate-500'>
               <p>Demo accounts:</p>
               <p className='text-xs'>
                 Admin: admin@example.com / admin123

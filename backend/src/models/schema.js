@@ -44,6 +44,7 @@ export const experiences = pgTable('experiences', {
   title: text('title').notNull(),
   description: text('description').notNull(),
   markerImage: text('marker_image').notNull(),
+  markerDimensions: jsonb('marker_dimensions').$type(), // Store marker image dimensions
   mindFile: text('mind_file'),
   userId: varchar('user_id').references(() => users.id),
   contentConfig: jsonb('content_config').$type().notNull(),
