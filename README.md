@@ -1,6 +1,24 @@
-# 🎯 AR Configurator - Production Ready
+# 🚀 AR Configurator - Unified Production Ready
 
-A complete AR (Augmented Reality) experience configurator built with React, Node.js, and MySQL. Create, customize, and share interactive AR experiences with 3D models, images, videos, and audio.
+A modern AR (Augmented Reality) configurator with **unified backend architecture** serving both API and frontend from a single server. Built with React, Node.js, and MindAR for immersive product visualization experiences.
+
+## 🏗️ **Unified Architecture**
+
+**Single Server Setup:**
+- ✅ Backend serves both API (`/api/*`) and frontend (`/*`)
+- ✅ Frontend build served from `backend/public/`
+- ✅ No separate frontend server needed
+- ✅ Perfect for VPS deployment with PM2
+- ✅ Simplified production deployment
+
+```
+Production Server:
+├── Express Backend (Port 3001)
+│   ├── API Routes (/api/*)
+│   ├── Static Frontend (/* - served from public/)
+│   ├── File Uploads (/uploads/*)
+│   └── AR Experiences (/experiences/*)
+```
 
 ## 🚀 Quick Start
 

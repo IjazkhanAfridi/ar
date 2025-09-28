@@ -32,17 +32,16 @@ Your VPS:
 
 ### 1.1 Test Local Build
 ```bash
-# Install dependencies
-npm run install:all
+# Use the production build script (recommended)
+./build-production.bat  # Windows
+# OR
+./build-production.sh   # Linux/Mac
 
-# Build frontend
+# OR manually:
+cd backend
 npm run build
 
-# Copy frontend to backend
-npm run copy:frontend
-
 # Test local production server
-cd backend
 npm start
 ```
 
@@ -125,13 +124,17 @@ git checkout production
 
 ### 3.4 Install Dependencies and Build
 ```bash
-# Install Node.js dependencies
-npm run install:all
+# Use the production build script (recommended)
+chmod +x build-production.sh
+./build-production.sh
 
-# Build the frontend
+# OR manually:
+cd backend
+npm install --production=false
+cd ../frontend  
+npm install
 npm run build
-
-# Copy frontend to backend public directory
+cd ../backend
 npm run copy:frontend
 
 # Verify the build
