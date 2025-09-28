@@ -66,13 +66,19 @@ app.use(
 // API routes
 app.use('/api', apiRoutes);
 
-// Serve frontend static files from build
-const frontendDistPath = path.join(__dirname, '..', '..', 'frontend', 'dist');
-app.use(express.static(frontendDistPath));
+// Serve frontend static files from public directory
+const publicPath = path.join(__dirname, '..', 'public');
+app.use(express.static(publicPath));
 
 // Handle SPA routing - send all non-API requests to frontend
 app.get('*', (req, res) => {
-  res.sendFile(path.join(frontendDistPath, 'index.html'));
+  // First check if index.html exists in public directory
+  const indexPath = path.join(publicPath, 'index.html');
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      res.status(404).send('Frontend not built. Please run: npm run build && npm run copy:frontend');
+    }
+  });
 });
 
 // Global error handler (moved after static file serving)

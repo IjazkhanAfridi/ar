@@ -7,7 +7,10 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "build": "echo 'Backend ready for production'"
+    "build": "npm run build:frontend && npm run copy:frontend",
+    "build:frontend": "cd ../frontend && npm run build",
+    "copy:frontend": "node scripts/copy-frontend.js",
+    "build:production": "npm run build && echo 'Production build complete'"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

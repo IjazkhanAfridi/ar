@@ -1,16 +1,11 @@
 // API configuration
 const getApiBaseUrl = () => {
-  // Check for environment variable first
-  if (import.meta.env.VITE_API_BASE_URL) {
-    return import.meta.env.VITE_API_BASE_URL;
-  }
-  
-  // In production without env var, use same domain
+  // In production, always use same origin (backend serves frontend)
   if (import.meta.env.PROD) {
-    return window.location.origin;
+    return '';  // Empty string means same origin
   }
   
-  // In development, use localhost
+  // In development, use localhost backend
   return 'http://localhost:5000';
 };
 
