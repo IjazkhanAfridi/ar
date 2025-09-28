@@ -1,33 +1,41 @@
-# AR Configurator - Unified Application
+# 🎯 AR Configurator - Production Ready
+
+A complete AR (Augmented Reality) experience configurator built with React, Node.js, and MySQL. Create, customize, and share interactive AR experiences with 3D models, images, videos, and audio.
 
 ## 🚀 Quick Start
 
-Run the entire application (frontend + backend) with a single command:
-
+### Development
 ```bash
-npm run start
+# Install all dependencies
+npm run install:all
+
+# Start frontend (development server)
+npm run dev:frontend
+
+# Start backend (in another terminal)
+npm run dev:backend
 ```
 
-This command will:
-1. Build the frontend for production
-2. Start the backend server
-3. Serve the frontend from the backend server
+### Production
+```bash
+# Build and deploy
+npm run production
+```
 
-The application will be available at: **http://localhost:5000**
-
-## 🏗 Architecture
+## 🏗️ Architecture
 
 ### Unified Server Setup
-- **Backend**: Node.js Express server (Port 5000)
-- **Frontend**: React application served as static files from backend
-- **Database**: PostgreSQL with Drizzle ORM
-- **AR Framework**: A-Frame with MindAR
+- **Backend**: Node.js Express server (serves both API and frontend)
+- **Frontend**: React application built and served from backend
+- **Database**: MySQL with Drizzle ORM
+- **AR Framework**: MindAR with Three.js
 
 ### How It Works
-1. The backend server serves static files from `frontend/dist`
-2. All API routes are available at `/api/*`
-3. All other routes serve the React application (SPA routing)
-4. Upload files are served from `/uploads/*`
+1. Frontend builds to `frontend/dist/`
+2. Build script copies frontend to `backend/public/`
+3. Backend serves static files from `public/` directory
+4. All API routes available at `/api/*`
+5. SPA routing handled by backend serving `index.html`
 5. AR experiences are served from `/experiences/*`
 
 ## 📋 Available Commands

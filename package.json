@@ -1,19 +1,17 @@
-{
+﻿{
   "name": "ar-configurator",
   "version": "1.0.0",
   "description": "AR Configurator - Complete Application",
-  "type": "module",
   "scripts": {
+    "install:all": "cd frontend && npm install && cd ../backend && npm install",
+    "build": "cd frontend && npm run build",
+    "copy:frontend:windows": "xcopy \"frontend\\dist\\*\" \"backend\\public\\\" /E /I /Y",
+    "copy:frontend:linux": "cp -r frontend/dist/* backend/public/",
+    "copy:frontend": "cp -r frontend/dist/* backend/public/ 2>/dev/null || xcopy \"frontend\\dist\\*\" \"backend\\public\\\" /E /I /Y",
+    "start": "cd backend && npm start",
     "dev:frontend": "cd frontend && npm run dev",
     "dev:backend": "cd backend && npm run dev",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "build": "cd frontend && npm ci && npm run build",
-    "build:frontend": "cd frontend && npm ci && npm run build",
-    "start": "cd backend && npm run start",
-    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install"
-  },
-  "devDependencies": {
-    "concurrently": "^8.2.2",
-    "cross-env": "^7.0.3"
+    "production": "npm run build && npm run copy:frontend && npm run start",
+    "deploy": "npm run build && npm run copy:frontend"
   }
 }
