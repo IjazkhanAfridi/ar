@@ -43,22 +43,31 @@ export function ContentSelector({
         fetch(buildApiUrl('/api/library/audios'), { credentials: 'include' }),
       ]);
 
-      const [models, images, videos, audios] = await Promise.all([
+      const [modelsPayload, imagesPayload, videosPayload, audiosPayload] = await Promise.all([
         modelsRes.json(),
         imagesRes.json(),
         videosRes.json(),
         audiosRes.json(),
       ]);
 
-      // Arrays are returned directly (like working version)
+      const extractItems = (payload, key) => {
+        if (!payload) return [];
+        if (Array.isArray(payload)) return payload;
+        if (Array.isArray(payload.data)) return payload.data;
+        if (payload.data && Array.isArray(payload.data[key])) return payload.data[key];
+        if (Array.isArray(payload[key])) return payload[key];
+        return [];
+      };
+
       setLibraries({
-        models: models || [],
-        images: images || [],
-        videos: videos || [],
-        audios: audios || [],
+        models: extractItems(modelsPayload, 'models'),
+        images: extractItems(imagesPayload, 'images'),
+        videos: extractItems(videosPayload, 'videos'),
+        audios: extractItems(audiosPayload, 'audios'),
       });
     } catch (error) {
       console.error('Error fetching libraries:', error);
+      setLibraries({ models: [], images: [], videos: [], audios: [] });
     }
   };
 

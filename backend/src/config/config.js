@@ -17,6 +17,7 @@ export const config = {
 
   // Upload limits
   MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE) || 50 * 1024 * 1024, // 50MB
+  MAX_FIELD_SIZE: parseInt(process.env.MAX_FIELD_SIZE) || 10 * 1024 * 1024, // 10MB per field
   
   // CORS
   CORS_ORIGIN: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000', 'http://localhost:5173'],

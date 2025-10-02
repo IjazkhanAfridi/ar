@@ -2,144 +2,188 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
-export function ARViewer({ mindFile, contentConfig, onClose }) {
+const applyTransform = (object3D, { position, rotation, scale }) => {
+  if (position) {
+    object3D.position.set(position.x ?? 0, position.y ?? 0, position.z ?? 0);
+  }
+  if (rotation) {
+    object3D.rotation.set(rotation.x ?? 0, rotation.y ?? 0, rotation.z ?? 0);
+  }
+  if (scale) {
+    object3D.scale.set(scale.x ?? 1, scale.y ?? 1, scale.z ?? 1);
+  }
+};
+
+export function ARViewer({ mindFile, contentConfig, targetsConfig, onClose }) {
   const containerRef = useRef(null);
   const mindARRef = useRef(null);
+  const mixersRef = useRef([]);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !mindFile) return;
 
-    console.log('AR Viewer starting with:', { mindFile, contentConfig });
-
-    let mixer;
+    let isCancelled = false;
 
     const start = async () => {
-      try {
-        // Check if MindARThree is available
-        if (!window.MindARThree) {
-          console.error('MindARThree is not available');
+      if (!window.MindARThree) {
+        console.error('MindARThree is not available');
+        return;
+      }
+
+      const mindarThree = new window.MindARThree.MindARThree({
+        container: containerRef.current,
+        imageTargetSrc: mindFile,
+      });
+      mindARRef.current = mindarThree;
+
+      const { renderer, scene, camera } = mindarThree;
+      const hemiLight = new THREE.HemisphereLight(0xffffff, 0xbbbbbb, 1);
+      scene.add(hemiLight);
+
+      const loader = new GLTFLoader();
+      loader.setCrossOrigin('anonymous');
+      const textureLoader = new THREE.TextureLoader();
+      textureLoader.setCrossOrigin('anonymous');
+      const mixers = [];
+
+      const anchorConfigs = Array.isArray(targetsConfig) && targetsConfig.length > 0
+        ? targetsConfig
+        : [{ sceneObjects: contentConfig?.sceneObjects || [] }];
+
+      const addSceneObjectToAnchor = (anchor, sceneObject = {}) => {
+        const { content = {} } = sceneObject;
+        const type = content.type;
+
+        if (!type || !content.url) {
           return;
         }
 
-        // Initialize MindAR
-        const mindarThree = new window.MindARThree.MindARThree({
-          container: containerRef.current,
-          imageTargetSrc: mindFile,
-        });
-        mindARRef.current = mindarThree;
-
-        const { renderer, scene, camera } = mindarThree;
-
-        // Add lighting
-        const light = new THREE.HemisphereLight(0xffffff, 0xbbbbbb, 1);
-        scene.add(light);
-
-        // Create anchor for the AR content
-        const anchor = mindarThree.addAnchor(0);
-
-        // Add 3D content based on scene objects
-        if (
-          contentConfig.sceneObjects &&
-          contentConfig.sceneObjects.length > 0
-        ) {
-          for (const sceneObject of contentConfig.sceneObjects) {
-            const { content } = sceneObject;
-
-            if (content.type === 'model') {
-              const loader = new GLTFLoader();
-              loader.load(content.url, (gltf) => {
+        switch (type) {
+          case 'model':
+            loader.load(
+              content.url,
+              (gltf) => {
+                if (isCancelled) return;
                 const model = gltf.scene;
-
-                // Apply transform from scene editor
-                model.position.copy(
-                  new THREE.Vector3(
-                    sceneObject.position.x,
-                    sceneObject.position.y,
-                    sceneObject.position.z
-                  )
-                );
-                model.rotation.setFromVector3(
-                  new THREE.Vector3(
-                    sceneObject.rotation.x,
-                    sceneObject.rotation.y,
-                    sceneObject.rotation.z
-                  )
-                );
-                model.scale.copy(
-                  new THREE.Vector3(
-                    sceneObject.scale.x,
-                    sceneObject.scale.y,
-                    sceneObject.scale.z
-                  )
-                );
-
+                applyTransform(model, sceneObject);
                 anchor.group.add(model);
 
-                // Handle animations if present
-                if (gltf.animations.length > 0) {
-                  mixer = new THREE.AnimationMixer(model);
-                  const action = mixer.clipAction(gltf.animations[0]);
-                  action.play();
+                if (gltf.animations && gltf.animations.length > 0) {
+                  const mixer = new THREE.AnimationMixer(model);
+                  mixers.push(mixer);
+                  mixer.clipAction(gltf.animations[0]).play();
                 }
-              });
-            } else if (content.type === 'image') {
-              const texture = new THREE.TextureLoader().load(content.url);
-              const geometry = new THREE.PlaneGeometry(1, 1);
-              const material = new THREE.MeshBasicMaterial({ map: texture });
-              const plane = new THREE.Mesh(geometry, material);
+              },
+              undefined,
+              (error) => {
+                console.error('Failed to load model', error);
+              }
+            );
+            break;
 
-              plane.position.copy(
-                new THREE.Vector3(
-                  sceneObject.position.x,
-                  sceneObject.position.y,
-                  sceneObject.position.z
-                )
-              );
-              plane.rotation.setFromVector3(
-                new THREE.Vector3(
-                  sceneObject.rotation.x,
-                  sceneObject.rotation.y,
-                  sceneObject.rotation.z
-                )
-              );
-              plane.scale.copy(
-                new THREE.Vector3(
-                  sceneObject.scale.x,
-                  sceneObject.scale.y,
-                  sceneObject.scale.z
-                )
-              );
+          case 'image': {
+            textureLoader.load(
+              content.url,
+              (texture) => {
+                if (isCancelled) return;
+                if ('colorSpace' in texture && THREE.SRGBColorSpace) {
+                  texture.colorSpace = THREE.SRGBColorSpace;
+                }
+                const geometry = new THREE.PlaneGeometry(1, 1);
+                const material = new THREE.MeshBasicMaterial({
+                  map: texture,
+                  transparent: true,
+                  side: THREE.DoubleSide,
+                });
+                const plane = new THREE.Mesh(geometry, material);
+                applyTransform(plane, sceneObject);
+                anchor.group.add(plane);
+              },
+              undefined,
+              (error) => {
+                console.error('Failed to load image texture', error);
+              }
+            );
+            break;
+          }
 
-              anchor.group.add(plane);
+          case 'video': {
+            const video = document.createElement('video');
+            video.src = content.url;
+            video.loop = true;
+            video.muted = true;
+            video.playsInline = true;
+            video.crossOrigin = 'anonymous';
+            video.autoplay = true;
+            video.play().catch((err) => {
+              console.warn('Video autoplay failed', err);
+            });
+
+            const texture = new THREE.VideoTexture(video);
+            if ('colorSpace' in texture && THREE.SRGBColorSpace) {
+              texture.colorSpace = THREE.SRGBColorSpace;
             }
+            const geometry = new THREE.PlaneGeometry(1, 1);
+            const material = new THREE.MeshBasicMaterial({
+              map: texture,
+              side: THREE.DoubleSide,
+            });
+            const plane = new THREE.Mesh(geometry, material);
+            applyTransform(plane, sceneObject);
+            anchor.group.add(plane);
+            break;
           }
+
+          case 'light': {
+            const light = new THREE.DirectionalLight(
+              content.color || 0xffffff,
+              content.intensity ?? 1
+            );
+            applyTransform(light, sceneObject);
+            anchor.group.add(light);
+            break;
+          }
+
+          default:
+            break;
         }
+      };
 
-        // Start AR experience
-        await mindarThree.start();
-
-        // Animation loop
-        const clock = new THREE.Clock();
-        renderer.setAnimationLoop(() => {
-          if (mixer) {
-            mixer.update(clock.getDelta());
-          }
-          renderer.render(scene, camera);
+      anchorConfigs.forEach((target, index) => {
+        const anchor = mindarThree.addAnchor(index);
+        (target.sceneObjects || []).forEach((sceneObject) => {
+          addSceneObjectToAnchor(anchor, sceneObject);
         });
-      } catch (error) {
-        console.error('Error starting AR viewer:', error);
-      }
+      });
+
+      await mindarThree.start();
+
+      const clock = new THREE.Clock();
+      renderer.setAnimationLoop(() => {
+        const delta = clock.getDelta();
+        mixers.forEach((mixer) => mixer.update(delta));
+        renderer.render(scene, camera);
+      });
+
+      mixersRef.current = mixers;
     };
 
-    start().catch(console.error);
+    start().catch((error) => console.error('Error starting AR viewer:', error));
 
-    // Cleanup
     return () => {
+      isCancelled = true;
+      const mixers = mixersRef.current;
+      mixers.forEach((mixer) => mixer.stopAllAction?.());
+      mixersRef.current = [];
+
       if (mindARRef.current) {
-        mindARRef.current.stop();
+        mindARRef.current.stop().catch((err) => {
+          console.warn('Error stopping MindAR', err);
+        });
+        mindARRef.current = null;
       }
     };
-  }, [mindFile, contentConfig]);
+  }, [mindFile, contentConfig, targetsConfig]);
 
   return (
     <div ref={containerRef} className='fixed inset-0 bg-black'>

@@ -237,6 +237,7 @@ export default function Create() {
         >
           <SceneEditor
             markerImage={markerImage}
+            markerDimensions={markerDimensions}
             config={sceneConfig}
             onChange={setSceneConfig}
             onMindFileUpload={handleMindFileUpload}

@@ -128,6 +128,7 @@ const calculateInitialScale = (contentDimensions, markerDimensions) => {
 
 export function SceneEditor({
   markerImage,
+  markerDimensions: providedMarkerDimensions,
   config,
   onChange,
   onMindFileUpload,
@@ -429,7 +430,7 @@ export function SceneEditor({
               }
               
               // Get marker dimensions for scale calculation
-              const markerDimensions = markerImage?.dimensions || null;
+              const markerDimensions = providedMarkerDimensions || null;
               
               // Calculate proper scale based on content and marker dimensions
               if (contentDimensions && markerDimensions) {

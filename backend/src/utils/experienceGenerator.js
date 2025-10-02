@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { ensureSceneConfig, sanitizeTargets } from './experienceNormalizer.js';
 
 // Ensure env vars are loaded for transformation tuning
 dotenv.config();
@@ -16,6 +17,7 @@ const __dirname = path.dirname(__filename);
 const POSITION_SCALE = parseFloat(process.env.AR_POSITION_SCALE || '0.5'); // Optimized scale for AR space
 const Y_OFFSET_FOR_VISIBILITY = parseFloat(process.env.AR_Y_OFFSET || '0.02'); // Minimum height above marker
 const DEBUG_TRANSFORMS = (process.env.AR_DEBUG_TRANSFORMS || 'true').toLowerCase() === 'true'; // Enable transform debugging
+const PRESERVE_CREATION_SCALE = (process.env.AR_PRESERVE_CREATION_SCALE || 'false').toLowerCase() === 'true';
 
 // 3D Model specific rotation adjustments (in radians)
 const MODEL_ROTATION_OFFSET_X = parseFloat(process.env.AR_MODEL_ROTATION_X || '0'); // Additional X rotation for 3D models
@@ -30,7 +32,16 @@ const AR_SCALE_FACTOR_VIDEO = parseFloat(process.env.AR_SCALE_FACTOR_VIDEO || '0
 const AR_USE_MARKER_SCALING = (process.env.AR_USE_MARKER_SCALING || 'true').toLowerCase() === 'true';
 const AR_MARKER_BASELINE_SIZE = parseFloat(process.env.AR_MARKER_BASELINE_SIZE || '200');
 
-function transformPlacement(obj, markerDimensions = null) {
+function transformPlacement(obj, markerDimensions = null, options = {}) {
+  const {
+    isMultipleTargets = false,
+    preserveCreationScale,
+  } = options;
+
+  const shouldPreserveScale =
+    preserveCreationScale !== undefined
+      ? preserveCreationScale
+      : PRESERVE_CREATION_SCALE;
   // Original values from the creation experience (frontend sends in radians and AR units)
   let { x, y, z } = obj.position || { x: 0, y: 0, z: 0 };
   let { x: rx, y: ry, z: rz } = obj.rotation || { x: 0, y: 0, z: 0 };
@@ -91,15 +102,40 @@ function transformPlacement(obj, markerDimensions = null) {
   
   // Marker-based position adjustment if marker dimensions are available
   if (markerDimensions && markerDimensions.width && markerDimensions.height) {
-    // Normalize position based on marker aspect ratio to handle rectangular markers properly
-    const markerAspect = markerDimensions.width / markerDimensions.height;
-    
-    if (markerAspect > 1) {
-      // Wide marker: scale X positions more
-      x *= markerAspect * 0.5;
+    if (isMultipleTargets) {
+      const maxDimension = Math.max(markerDimensions.width, markerDimensions.height);
+      const widthScale = markerDimensions.width / maxDimension;
+      const heightScale = markerDimensions.height / maxDimension;
+
+      x *= widthScale;
+      z *= heightScale;
+
+      if (DEBUG_TRANSFORMS) {
+        console.log('[DEBUG] Marker axis scaling applied (multi-target):', {
+          width: markerDimensions.width,
+          height: markerDimensions.height,
+          widthScale: widthScale.toFixed(3),
+          heightScale: heightScale.toFixed(3),
+          adjustedPosition: { x: x.toFixed(3), y: y.toFixed(3), z: z.toFixed(3) },
+        });
+      }
     } else {
-      // Tall marker: scale Z positions more  
-      z *= (1 / markerAspect) * 0.5;
+      const markerAspect = markerDimensions.width / markerDimensions.height;
+
+      if (markerAspect > 1) {
+        x *= markerAspect * 0.5;
+      } else {
+        z *= (1 / markerAspect) * 0.5;
+      }
+
+      if (DEBUG_TRANSFORMS) {
+        console.log('[DEBUG] Marker axis scaling applied (single-target):', {
+          width: markerDimensions.width,
+          height: markerDimensions.height,
+          aspect: markerAspect.toFixed(3),
+          adjustedPosition: { x: x.toFixed(3), y: y.toFixed(3), z: z.toFixed(3) },
+        });
+      }
     }
   }
   
@@ -222,81 +258,78 @@ function transformPlacement(obj, markerDimensions = null) {
   // The key insight: preserve the relative scale relationships the user created
   // Different object types may need different scale handling
   
-  let AR_SCALE_FACTOR;
-  
-  switch (obj.content.type) {
-    case 'image':
-      AR_SCALE_FACTOR = AR_SCALE_FACTOR_IMAGE;
-      break;
-      
-    case 'video':
-      AR_SCALE_FACTOR = AR_SCALE_FACTOR_VIDEO;
-      break;
-      
-    case 'model':
-      AR_SCALE_FACTOR = AR_SCALE_FACTOR_MODEL;
-      break;
-      
-    case 'audio':
-      // Audio objects are invisible, scale doesn't matter visually but keep consistent
-      AR_SCALE_FACTOR = 1.0;
-      break;
-      
-    default:
-      AR_SCALE_FACTOR = AR_SCALE_FACTOR_IMAGE; // Default to image scaling
-      break;
-  }
-  
-  // Apply marker-relative scaling if enabled and marker dimensions are available
-  if (AR_USE_MARKER_SCALING && markerDimensions && markerDimensions.width && markerDimensions.height) {
-    // Adjust scale based on marker size - larger markers can support larger objects
-    const markerSizeFactor = Math.min(markerDimensions.width, markerDimensions.height) / AR_MARKER_BASELINE_SIZE;
-    AR_SCALE_FACTOR *= Math.max(0.5, Math.min(1.5, markerSizeFactor)); // Clamp between 0.5x and 1.5x
-  }
-  
-  // Store original scale for debugging
   const originalSx = sx, originalSy = sy, originalSz = sz;
-  
-  // CRITICAL FIX: Use content dimensions for intelligent scaling
-  let contentBasedScaling = 1.0;
-  
-  if (obj.content && obj.content.dimensions && markerDimensions) {
-    const contentDims = obj.content.dimensions;
-    const markerSize = Math.min(markerDimensions.width, markerDimensions.height);
-    const contentSize = Math.max(contentDims.width || 1, contentDims.height || 1);
-    
-    // Calculate scale factor to make content appropriately sized for marker
-    contentBasedScaling = (markerSize * 0.3) / contentSize; // Content should be ~30% of marker size
-    contentBasedScaling = Math.max(0.1, Math.min(2.0, contentBasedScaling)); // Clamp to reasonable bounds
-    
-    if (DEBUG_TRANSFORMS) {
-      console.log(`[DEBUG] Content-based scaling for ${obj.content.type}:`, {
-        contentSize,
-        markerSize,
-        contentBasedScaling: contentBasedScaling.toFixed(3)
-      });
+
+  let finalScaleFactor = 1.0;
+
+  if (!shouldPreserveScale) {
+    let baseScaleFactor;
+
+    switch (obj.content.type) {
+      case 'image':
+        baseScaleFactor = AR_SCALE_FACTOR_IMAGE;
+        break;
+
+      case 'video':
+        baseScaleFactor = AR_SCALE_FACTOR_VIDEO;
+        break;
+
+      case 'model':
+        baseScaleFactor = AR_SCALE_FACTOR_MODEL;
+        break;
+
+      case 'audio':
+        baseScaleFactor = 1.0;
+        break;
+
+      default:
+        baseScaleFactor = AR_SCALE_FACTOR_IMAGE;
+        break;
     }
+
+    if (AR_USE_MARKER_SCALING && markerDimensions && markerDimensions.width && markerDimensions.height) {
+      const markerSizeFactor = Math.min(markerDimensions.width, markerDimensions.height) / AR_MARKER_BASELINE_SIZE;
+      baseScaleFactor *= Math.max(0.5, Math.min(1.5, markerSizeFactor));
+    }
+
+    let contentBasedScaling = 1.0;
+
+    if (obj.content && obj.content.dimensions && markerDimensions) {
+      const contentDims = obj.content.dimensions;
+      const markerSize = Math.min(markerDimensions.width, markerDimensions.height);
+      const contentSize = Math.max(contentDims.width || 1, contentDims.height || 1);
+
+      contentBasedScaling = (markerSize * 0.3) / contentSize;
+      contentBasedScaling = Math.max(0.1, Math.min(2.0, contentBasedScaling));
+
+      if (DEBUG_TRANSFORMS) {
+        console.log(`[DEBUG] Content-based scaling for ${obj.content.type}:`, {
+          contentSize,
+          markerSize,
+          contentBasedScaling: contentBasedScaling.toFixed(3)
+        });
+      }
+    }
+
+    finalScaleFactor = baseScaleFactor * contentBasedScaling;
+  } else if (DEBUG_TRANSFORMS) {
+    console.log(`[DEBUG] Preserving creation scale for ${obj.content?.type}.`);
   }
-  
-  // Combine base AR scaling with content-based scaling
-  const finalScaleFactor = AR_SCALE_FACTOR * contentBasedScaling;
-  
-  // Apply final scale transformation
+
   sx *= finalScaleFactor;
-  sy *= finalScaleFactor; 
+  sy *= finalScaleFactor;
   sz *= finalScaleFactor;
-  
+
   if (DEBUG_TRANSFORMS) {
     console.log(`[DEBUG] Complete transform for ${obj.content?.type}:`, {
-      original: { 
+      original: {
         scale: { sx: originalSx.toFixed(3), sy: originalSy.toFixed(3), sz: originalSz.toFixed(3) }
       },
       factors: {
-        AR_scale: AR_SCALE_FACTOR.toFixed(3),
-        content_based: contentBasedScaling.toFixed(3),
+        preserveCreation: shouldPreserveScale,
         final: finalScaleFactor.toFixed(3)
       },
-      transformed: { 
+      transformed: {
         scale: { sx: sx.toFixed(3), sy: sy.toFixed(3), sz: sz.toFixed(3) }
       },
       content_dims: obj.content?.dimensions || 'none',
@@ -354,18 +387,25 @@ export function generateExperienceHtml(experience) {
     throw new Error('At least one scene object is required');
   }
 
+  const normalizedExperience = {
+    ...experience,
+    contentConfig: ensureSceneConfig(experience.contentConfig),
+  };
+
+  const sceneObjects = normalizedExperience.contentConfig.sceneObjects;
+
   console.log('Generating AR experience HTML with enhanced positioning:', {
-    id: experience.id,
-    title: experience.title,
-    mindFile: experience.mindFile,
-    sceneObjectsCount: experience.contentConfig.sceneObjects.length,
-    mediaTypes: experience.contentConfig.sceneObjects.map(obj => obj.content.type),
+    id: normalizedExperience.id,
+    title: normalizedExperience.title,
+    mindFile: normalizedExperience.mindFile,
+    sceneObjectsCount: sceneObjects.length,
+    mediaTypes: sceneObjects.map(obj => obj.content.type),
     positionScale: POSITION_SCALE,
     yOffset: Y_OFFSET_FOR_VISIBILITY,
     debugMode: DEBUG_TRANSFORMS,
   });
 
-  const assets = experience.contentConfig.sceneObjects
+  const assets = sceneObjects
     .map((obj, index) => {
       if (obj.content.type === 'image' && obj.content.url) {
         return `<img id="asset-${obj.id}" src="${obj.content.url}" crossorigin="anonymous" />`;
@@ -385,11 +425,13 @@ export function generateExperienceHtml(experience) {
     .join('\n        ');
 
   // Extract marker dimensions if available (for better positioning context)
-  const markerDimensions = experience.markerDimensions || null;
+  const markerDimensions = normalizedExperience.markerDimensions || null;
 
-  const entities = experience.contentConfig.sceneObjects
+  const entities = sceneObjects
     .map((obj) => {
-      const { positionStr, rotationStr, scaleStr } = transformPlacement(obj, markerDimensions);
+      const { positionStr, rotationStr, scaleStr } = transformPlacement(obj, markerDimensions, {
+        isMultipleTargets: false,
+      });
 
       switch (obj.content.type) {
         case 'image':
@@ -456,7 +498,7 @@ export function generateExperienceHtml(experience) {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <title>AR Experience - ${experience.title}</title>
+  <title>AR Experience - ${normalizedExperience.title}</title>
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     <style>
@@ -522,7 +564,7 @@ export function generateExperienceHtml(experience) {
     
     <a-scene
       mindar-image="imageTargetSrc: ${
-        experience.mindFile
+        normalizedExperience.mindFile
       }; filterMinCF:0.0001; filterBeta: 0.01; showStats: false"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
@@ -547,14 +589,14 @@ export function generateExperienceHtml(experience) {
 
     <div class="controls">
       ${
-        experience.contentConfig.sceneObjects.some(
+        sceneObjects.some(
           (obj) => obj.content.type === 'audio'
         )
           ? '<button id="audioToggle" class="control-btn audio-control">🔊 Sound On</button>'
           : ''
       }
       ${
-        experience.contentConfig.sceneObjects.some(
+        sceneObjects.some(
           (obj) => obj.content.type === 'video'
         )
           ? '<button id="videoToggle" class="control-btn video-control">🎬 Video On</button>'
@@ -709,8 +751,7 @@ export function generateExperienceHtml(experience) {
           }
         }
 
-        // Unmute all videos
-        function unmuteVideos() {
+        // Unmute all videos() {
           videoEntities.forEach(video => {
             video.muted = false;
           });
@@ -786,28 +827,34 @@ export function saveExperienceHtml(experience) {
 }
 
 export function generateMultipleImageExperienceHtml(experience) {
-  if (!experience.mindFile) {
+  if (!experience?.mindFile) {
     throw new Error('Mind file is required to generate AR experience');
   }
-  if (!experience.markerImage) {
+  if (!experience?.markerImage) {
     throw new Error('Marker image is required');
   }
-  if (!experience.targetsConfig || experience.targetsConfig.length === 0) {
+  if (!experience?.targetsConfig || experience.targetsConfig.length === 0) {
     throw new Error('At least one target configuration is required');
   }
 
+  const normalizedExperience = {
+    ...experience,
+    contentConfig: ensureSceneConfig(experience.contentConfig),
+    targetsConfig: sanitizeTargets(experience.targetsConfig),
+  };
+
   console.log('Generating multiple image HTML for experience:', {
-    id: experience.id,
-    title: experience.title,
-    mindFile: experience.mindFile,
-    targetsCount: experience.targetsConfig.length,
+    id: normalizedExperience.id,
+    title: normalizedExperience.title,
+    mindFile: normalizedExperience.mindFile,
+    targetsCount: normalizedExperience.targetsConfig.length,
   });
 
   // Collect all assets from all targets
   const allAssets = [];
   const allTargets = [];
 
-  experience.targetsConfig.forEach((target, targetIndex) => {
+  normalizedExperience.targetsConfig.forEach((target, targetIndex) => {
     const assets = target.sceneObjects
       .map((obj) => {
         const assetId = `target-${targetIndex}-asset-${obj.id}`;
@@ -833,7 +880,14 @@ export function generateMultipleImageExperienceHtml(experience) {
       .map((obj) => {
         const assetId = `target-${targetIndex}-asset-${obj.id}`;
         // Apply the same transform logic for consistent top-down view
-        const { positionStr, rotationStr, scaleStr } = transformPlacement(obj);
+        const { positionStr, rotationStr, scaleStr } = transformPlacement(
+          obj,
+          target.markerDimensions || normalizedExperience.markerDimensions,
+          {
+            isMultipleTargets: true,
+            preserveCreationScale: true,
+          }
+        );
 
         switch (obj.content.type) {
           case 'image':
@@ -1093,7 +1147,13 @@ ${allTargets.join('\n\n')}
 }
 
 export function saveMultipleImageExperienceHtml(experience) {
-  const html = generateMultipleImageExperienceHtml(experience);
+  const normalizedExperience = {
+    ...experience,
+    contentConfig: ensureSceneConfig(experience.contentConfig),
+    targetsConfig: sanitizeTargets(experience.targetsConfig),
+  };
+
+  const html = generateMultipleImageExperienceHtml(normalizedExperience);
 
   // Create experiences directory if it doesn't exist
   const experiencesDir = path.join(process.cwd(), 'experiences');

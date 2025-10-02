@@ -3,6 +3,83 @@ import { fileService } from '../services/fileService.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import path from 'path';
 import fs from 'fs';
+import {
+  ensureSceneConfig,
+  sanitizeSceneObjects,
+  sanitizeTargets,
+} from '../utils/experienceNormalizer.js';
+
+const decodeBase64DataUrl = (dataUrl) => {
+  if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
+    return null;
+  }
+
+  const matches = dataUrl.match(/^data:(.+);base64,(.+)$/);
+  if (!matches || matches.length < 3) {
+    return null;
+  }
+
+  const mimeType = matches[1];
+  const base64Data = matches[2];
+
+  return {
+    buffer: Buffer.from(base64Data, 'base64'),
+    mimeType,
+  };
+};
+
+const getExtensionFromMimeType = (mimeType) => {
+  if (!mimeType) return '.png';
+
+  const mapping = {
+    'image/png': '.png',
+    'image/jpeg': '.jpg',
+    'image/jpg': '.jpg',
+    'image/webp': '.webp',
+    'image/gif': '.gif',
+  };
+
+  return mapping[mimeType] || '.png';
+};
+
+const normalizeExperienceForResponse = (experience) => {
+  if (!experience) return experience;
+
+  let contentConfig = experience.contentConfig;
+  if (typeof contentConfig === 'string') {
+    try {
+      contentConfig = JSON.parse(contentConfig);
+    } catch (error) {
+      console.warn('Failed to parse contentConfig string, defaulting to empty config.');
+      contentConfig = {};
+    }
+  }
+
+  let markerDimensions = experience.markerDimensions;
+  if (typeof markerDimensions === 'string') {
+    try {
+      markerDimensions = JSON.parse(markerDimensions);
+    } catch (error) {
+      markerDimensions = null;
+    }
+  }
+
+  let targetsConfig = experience.targetsConfig || [];
+  if (typeof targetsConfig === 'string') {
+    try {
+      targetsConfig = JSON.parse(targetsConfig);
+    } catch (error) {
+      targetsConfig = [];
+    }
+  }
+
+  return {
+    ...experience,
+    contentConfig: ensureSceneConfig(contentConfig || {}),
+    markerDimensions,
+    targetsConfig: sanitizeTargets(targetsConfig || []),
+  };
+};
 
 class ExperienceController {
   /**
@@ -212,9 +289,11 @@ class ExperienceController {
       });
     }
 
+    const normalizedExperience = normalizeExperienceForResponse(experience);
+
     res.json({
       success: true,
-      data: { experience },
+      data: { experience: normalizedExperience },
     });
   });
 
@@ -554,34 +633,32 @@ class ExperienceController {
    * Create multiple image experience
    */
   createMultipleImageExperience = asyncHandler(async (req, res) => {
-    const { title, description, targetsConfig } = req.body;
+    const { title, description, targetsConfig: rawTargetsConfig, markerDimensions: rawMarkerDimensions } = req.body;
     const userId = req.user.id;
 
-    // Validation
-    if (!title || !description || !targetsConfig) {
+    if (!title || !description || !rawTargetsConfig) {
       return res.status(400).json({
         success: false,
         message: 'Title, description, and targets configuration are required',
       });
     }
 
-    // Handle marker image upload (mind file)
-    let markerImageUrl = '';
-    if (req.file) {
-      const savedFile = await fileService.saveFile(
-        req.file.buffer,
-        req.file.originalname
-      );
-      markerImageUrl = savedFile.url;
+    const files = req.files || [];
+    const mindFile = files.find((f) => f.fieldname === 'mindFile');
+
+    if (!mindFile) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mind file is required',
+      });
     }
 
-    // Parse targets config if it's a string
     let parsedTargetsConfig;
     try {
       parsedTargetsConfig =
-        typeof targetsConfig === 'string'
-          ? JSON.parse(targetsConfig)
-          : targetsConfig;
+        typeof rawTargetsConfig === 'string'
+          ? JSON.parse(rawTargetsConfig)
+          : rawTargetsConfig;
     } catch (error) {
       return res.status(400).json({
         success: false,
@@ -589,18 +666,92 @@ class ExperienceController {
       });
     }
 
+    if (!Array.isArray(parsedTargetsConfig) || parsedTargetsConfig.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one target configuration is required',
+      });
+    }
+
+    let parsedMarkerDimensions = null;
+    if (rawMarkerDimensions) {
+      try {
+        parsedMarkerDimensions =
+          typeof rawMarkerDimensions === 'string'
+            ? JSON.parse(rawMarkerDimensions)
+            : rawMarkerDimensions;
+      } catch (error) {
+        console.warn('Invalid markerDimensions payload, ignoring.');
+      }
+    }
+
+    const processedTargets = [];
+    let primaryMarkerImageUrl = '';
+    let primaryMarkerDimensions = parsedMarkerDimensions || null;
+
+    for (let index = 0; index < parsedTargetsConfig.length; index++) {
+      const target = parsedTargetsConfig[index];
+      const targetId = target?.id || `target-${index}`;
+
+      let markerImageUrl = target?.markerImage || '';
+      let markerDimensions = target?.markerDimensions || null;
+
+      if (markerImageUrl?.startsWith('data:')) {
+        const decoded = decodeBase64DataUrl(markerImageUrl);
+        if (!decoded) {
+          return res.status(400).json({
+            success: false,
+            message: `Invalid base64 marker image for target ${targetId}`,
+          });
+        }
+
+        const extension = getExtensionFromMimeType(decoded.mimeType);
+        const savedMarker = await fileService.saveFile(
+          decoded.buffer,
+          `marker-${Date.now()}-${index}${extension}`,
+          {
+            processImage: true,
+            imageOptions: {
+              width: markerDimensions?.width || 1024,
+              height: markerDimensions?.height || 1024,
+              quality: 90,
+            },
+          }
+        );
+
+        markerImageUrl = savedMarker.url;
+        if (!markerDimensions && decoded.mimeType) {
+          markerDimensions = markerDimensions || null;
+        }
+
+        if (index === 0) {
+          primaryMarkerImageUrl = markerImageUrl;
+        }
+      } else if (index === 0 && markerImageUrl) {
+        primaryMarkerImageUrl = markerImageUrl;
+      }
+
+      if (index === 0 && markerDimensions && !primaryMarkerDimensions) {
+        primaryMarkerDimensions = markerDimensions;
+      }
+
+      processedTargets.push({
+        id: targetId,
+        name: target?.name || `Target ${index + 1}`,
+        markerImage: markerImageUrl,
+        markerDimensions: markerDimensions || null,
+        sceneObjects: sanitizeSceneObjects(target?.sceneObjects),
+      });
+    }
+
     const experienceData = {
       title,
       description,
-      markerImage: markerImageUrl,
+      markerImage: primaryMarkerImageUrl || processedTargets[0]?.markerImage || '',
+      markerDimensions: primaryMarkerDimensions || processedTargets[0]?.markerDimensions || null,
       isMultipleTargets: true,
-      targetsConfig: parsedTargetsConfig,
-      contentConfig: {
-        position: { x: 0, y: 0, z: 0 },
-        rotation: { x: 0, y: 0, z: 0 },
-        scale: { x: 1, y: 1, z: 1 },
-        sceneObjects: [],
-      },
+      targetsConfig: processedTargets,
+  contentConfig: ensureSceneConfig({}),
     };
 
     const experience = await experienceService.createExperience(
@@ -608,12 +759,12 @@ class ExperienceController {
       userId
     );
 
-    // Generate experience HTML
+    await experienceService.saveMindFile(experience.id, mindFile.buffer);
+
     try {
-      const experienceUrl =
-        await experienceService.generateMultipleImageExperienceHtml(
-          experience.id
-        );
+      const experienceUrl = await experienceService.generateMultipleImageExperienceHtml(
+        experience.id
+      );
       experience.experienceUrl = experienceUrl;
     } catch (error) {
       console.error('Error generating multiple image experience HTML:', error);
@@ -623,6 +774,211 @@ class ExperienceController {
       success: true,
       message: 'Multiple image experience created successfully',
       data: { experience },
+    });
+  });
+
+  /**
+   * Update multiple image experience
+   */
+  updateMultipleImageExperience = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const {
+      title,
+      description,
+      targetsConfig: rawTargetsConfig,
+      markerDimensions: rawMarkerDimensions,
+      contentConfig: rawContentConfig,
+    } = req.body;
+
+    if (!title || !description || !rawTargetsConfig) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title, description, and targets configuration are required',
+      });
+    }
+
+    const experienceId = parseInt(id);
+    const existingExperience = await experienceService.getExperienceById(
+      experienceId
+    );
+
+    if (!existingExperience) {
+      return res.status(404).json({
+        success: false,
+        message: 'Experience not found',
+      });
+    }
+
+    if (existingExperience.userId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to update this experience',
+      });
+    }
+
+    if (!existingExperience.isMultipleTargets) {
+      return res.status(400).json({
+        success: false,
+        message: 'Experience is not a multiple image experience',
+      });
+    }
+
+    let parsedTargetsConfig;
+    try {
+      parsedTargetsConfig =
+        typeof rawTargetsConfig === 'string'
+          ? JSON.parse(rawTargetsConfig)
+          : rawTargetsConfig;
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid targets configuration format',
+      });
+    }
+
+    if (!Array.isArray(parsedTargetsConfig) || parsedTargetsConfig.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one target configuration is required',
+      });
+    }
+
+    let parsedMarkerDimensions = null;
+    if (rawMarkerDimensions) {
+      try {
+        parsedMarkerDimensions =
+          typeof rawMarkerDimensions === 'string'
+            ? JSON.parse(rawMarkerDimensions)
+            : rawMarkerDimensions;
+      } catch (error) {
+        console.warn('Invalid markerDimensions payload, ignoring.');
+      }
+    }
+
+    let parsedContentConfig = null;
+    if (rawContentConfig) {
+      try {
+        parsedContentConfig =
+          typeof rawContentConfig === 'string'
+            ? JSON.parse(rawContentConfig)
+            : rawContentConfig;
+      } catch (error) {
+        console.warn('Invalid contentConfig payload, ignoring.');
+      }
+    }
+
+    const normalizedExisting = normalizeExperienceForResponse(
+      existingExperience
+    );
+
+    const files = req.files || [];
+    const mindFile = files.find((f) => f.fieldname === 'mindFile');
+
+    const processedTargets = [];
+    let primaryMarkerImageUrl = normalizedExisting.markerImage || '';
+    let primaryMarkerDimensions =
+      parsedMarkerDimensions || normalizedExisting.markerDimensions || null;
+
+    for (let index = 0; index < parsedTargetsConfig.length; index++) {
+      const target = parsedTargetsConfig[index];
+      const targetId = target?.id || `target-${index}`;
+
+      let markerImageUrl = target?.markerImage || '';
+      let markerDimensions = target?.markerDimensions || null;
+
+      if (markerImageUrl?.startsWith('data:')) {
+        const decoded = decodeBase64DataUrl(markerImageUrl);
+        if (!decoded) {
+          return res.status(400).json({
+            success: false,
+            message: `Invalid base64 marker image for target ${targetId}`,
+          });
+        }
+
+        const extension = getExtensionFromMimeType(decoded.mimeType);
+        const savedMarker = await fileService.saveFile(
+          decoded.buffer,
+          `marker-${Date.now()}-${index}${extension}`,
+          {
+            processImage: true,
+            imageOptions: {
+              width: markerDimensions?.width || 1024,
+              height: markerDimensions?.height || 1024,
+              quality: 90,
+            },
+          }
+        );
+
+        markerImageUrl = savedMarker.url;
+      }
+
+      processedTargets.push({
+        id: targetId,
+        name: target?.name || `Target ${index + 1}`,
+        markerImage: markerImageUrl,
+        markerDimensions: markerDimensions || null,
+        sceneObjects: sanitizeSceneObjects(target?.sceneObjects),
+      });
+
+      if (index === 0) {
+        primaryMarkerImageUrl = markerImageUrl || primaryMarkerImageUrl;
+        if (markerDimensions) {
+          primaryMarkerDimensions = markerDimensions;
+        }
+      }
+    }
+
+    if (!processedTargets.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'Unable to process targets configuration',
+      });
+    }
+
+    const updateData = {
+      title,
+      description,
+      markerImage: primaryMarkerImageUrl,
+      markerDimensions: primaryMarkerDimensions,
+      contentConfig: ensureSceneConfig(
+        parsedContentConfig || normalizedExisting.contentConfig || {}
+      ),
+      targetsConfig: processedTargets,
+      isMultipleTargets: true,
+    };
+
+    const updatedExperience = await experienceService.updateExperience(
+      experienceId,
+      updateData,
+      userId
+    );
+
+    if (mindFile) {
+      await experienceService.saveMindFile(experienceId, mindFile.buffer);
+    }
+
+    const refreshedExperience = await experienceService.getExperienceById(
+      experienceId
+    );
+    const normalizedExperience = normalizeExperienceForResponse(
+      refreshedExperience
+    );
+
+    try {
+      const experienceUrl =
+        await experienceService.generateMultipleImageExperienceHtml(
+          experienceId
+        );
+      normalizedExperience.experienceUrl = experienceUrl;
+    } catch (error) {
+      console.error('Error generating multiple image experience HTML:', error);
+    }
+
+    res.json({
+      success: true,
+      message: 'Multiple image experience updated successfully',
+      data: { experience: normalizedExperience },
     });
   });
 

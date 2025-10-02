@@ -55,6 +55,13 @@ router.post(
   experienceController.createMultipleImageExperience
 );
 
+router.put(
+  '/multiple-image/:id',
+  uploadLimiter,
+  uploadAny,
+  experienceController.updateMultipleImageExperience
+);
+
 // Content file routes
 router.post(
   '/:experienceId/content',

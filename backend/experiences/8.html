@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <title>AR Experience - asedrtfgyuhjiko</title>
+    <title>AR Experience - jhngbvfggggggg</title>
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     <style>
@@ -64,7 +64,7 @@
   <body>
     <div id="loading" class="loading">
       <div>Loading AR Experience...</div>
-      <div style="margin-top: 10px; font-size: 14px;">Point your camera at the marker image</div>
+      <div style="margin-top: 10px; font-size: 14px;">Point your camera at any marker image</div>
     </div>
     
     <a-scene
@@ -73,7 +73,8 @@
       device-orientation-permission-ui="enabled: false"
     >
       <a-assets>
-        <a-asset-item id="asset-obj_1756320321160_8b8yq0j" src="/uploads/1756320321027-Terracotta_Harmony_0516102104_texture.glb"></a-asset-item>
+        <a-asset-item id="target-0-asset-1759263296553t92xl4zxz" src="/uploads/1759263296362-Terracotta_Harmony_0516102104_texture.glb"></a-asset-item>
+        <a-asset-item id="target-1-asset-1759263358531lbpeqcywk" src="/uploads/1759263358391-Terracotta_Harmony_0516102104_texture.glb"></a-asset-item>
       </a-assets>
 
       <a-camera 
@@ -86,18 +87,26 @@
       ></a-camera>
 
       <a-entity mindar-image-target="targetIndex: 0">
-                <a-entity 
-          gltf-model="#asset-obj_1756320321160_8b8yq0j" 
-          position="0.000 1.510 0.000" 
-          rotation="90.0 0.0 0.0" 
-          scale="0.360 0.360 0.360"
-        ></a-entity>
+        <a-entity 
+            gltf-model="#target-0-asset-1759263296553t92xl4zxz" 
+            position="-0.781 0.249 -0.410" 
+            rotation="90.0 0.0 0.0" 
+            scale="0.170 0.170 0.170"
+          ></a-entity>
+      </a-entity>
+
+      <a-entity mindar-image-target="targetIndex: 1">
+        <a-entity 
+            gltf-model="#target-1-asset-1759263358531lbpeqcywk" 
+            position="0.615 0.255 0.107" 
+            rotation="90.0 0.0 0.0" 
+            scale="0.235 0.235 0.235"
+          ></a-entity>
       </a-entity>
     </a-scene>
 
     <div class="controls">
-      
-      
+      <button id="audioToggle" class="control-btn audio-control">🔊 Sound On</button>
     </div>
 
     <script>
@@ -105,15 +114,11 @@
         const loading = document.getElementById('loading');
         const scene = document.querySelector('a-scene');
         const audioToggle = document.getElementById('audioToggle');
-        const videoToggle = document.getElementById('videoToggle');
         let audioPlaying = false;
-        let videoPlaying = false;
         let audioEntities = [];
-        let videoEntities = [];
 
         // Hide loading when AR is ready
         scene.addEventListener('loaded', function() {
-          console.log('AR Scene loaded');
           setTimeout(() => {
             if (loading) {
               loading.style.display = 'none';
@@ -121,34 +126,20 @@
           }, 2000);
         });
 
-        // Handle AR target found/lost
-        const arTarget = document.querySelector('[mindar-image-target]');
+        // Handle AR targets
+        const arTargets = document.querySelectorAll('[mindar-image-target]');
         
-        if (arTarget) {
-          arTarget.addEventListener('targetFound', function() {
-            console.log('AR Target found!');
+        arTargets.forEach((target, index) => {
+          target.addEventListener('targetFound', function() {
+            console.log('AR Target', index, 'found!');
             if (loading) {
               loading.style.display = 'none';
             }
-            
-            // Auto-play audio if enabled
-            if (!audioPlaying && audioEntities.length > 0) {
-              playAudios();
-            }
-            
-            // Auto-play video if enabled
-            if (!videoPlaying && videoEntities.length > 0) {
-              playVideos();
-            }
           });
 
-          arTarget.addEventListener('targetLost', function() {
-            console.log('AR Target lost!');
-            // Pause all audios and videos when target is lost
-            pauseAudios();
-            pauseVideos();
+          target.addEventListener('targetLost', function() {
           });
-        }
+        });
 
         // Initialize audio entities
         function initAudioEntities() {
@@ -162,39 +153,17 @@
           });
         }
 
-        // Play all audio
-        function playAudios() {
-          audioEntities.forEach(audio => {
-            audio.play().catch(e => console.log('Audio play failed:', e));
-          });
-          audioPlaying = true;
-          if (audioToggle) {
-            audioToggle.textContent = '🔊 Sound On';
-            audioToggle.classList.remove('muted');
-          }
-        }
-
-        // Pause all audio
-        function pauseAudios() {
-          audioEntities.forEach(audio => {
-            audio.pause();
-          });
-          audioPlaying = false;
-        }
-
-        // Mute all audio
+        // Audio controls
         function muteAudios() {
           audioEntities.forEach(audio => {
             audio.muted = true;
           });
-          audioPlaying = false;
           if (audioToggle) {
             audioToggle.textContent = '🔇 Sound Off';
             audioToggle.classList.add('muted');
           }
         }
 
-        // Unmute all audio
         function unmuteAudios() {
           audioEntities.forEach(audio => {
             audio.muted = false;
@@ -205,65 +174,9 @@
           }
         }
 
-        // Initialize video entities
-        function initVideoEntities() {
-          const entities = document.querySelectorAll('[data-video-id]');
-          entities.forEach(entity => {
-            const videoId = entity.getAttribute('data-video-id');
-            const videoElement = document.getElementById(videoId);
-            if (videoElement) {
-              videoEntities.push(videoElement);
-            }
-          });
-        }
-
-        // Play all videos
-        function playVideos() {
-          videoEntities.forEach(video => {
-            video.play().catch(e => console.log('Video play failed:', e));
-          });
-          videoPlaying = true;
-          if (videoToggle) {
-            videoToggle.textContent = '🎬 Video On';
-            videoToggle.classList.remove('muted');
-          }
-        }
-
-        // Pause all videos
-        function pauseVideos() {
-          videoEntities.forEach(video => {
-            video.pause();
-          });
-          videoPlaying = false;
-        }
-
-        // Mute all videos
-        function muteVideos() {
-          videoEntities.forEach(video => {
-            video.muted = true;
-          });
-          videoPlaying = false;
-          if (videoToggle) {
-            videoToggle.textContent = '🎬 Video Off';
-            videoToggle.classList.add('muted');
-          }
-        }
-
-        // Unmute all videos
-        function unmuteVideos() {
-          videoEntities.forEach(video => {
-            video.muted = false;
-          });
-          if (videoToggle) {
-            videoToggle.textContent = '🎬 Video On';
-            videoToggle.classList.remove('muted');
-          }
-        }
-
-        // Initialize audio and video controls
+        // Initialize
         setTimeout(() => {
           initAudioEntities();
-          initVideoEntities();
           
           if (audioToggle && audioEntities.length > 0) {
             audioToggle.addEventListener('click', function() {
@@ -273,25 +186,17 @@
                 muteAudios();
               }
             });
-          }
-          
-          if (videoToggle && videoEntities.length > 0) {
-            videoToggle.addEventListener('click', function() {
-              if (videoToggle.classList.contains('muted')) {
-                unmuteVideos();
-              } else {
-                muteVideos();
-              }
-            });
+          } else if (audioToggle) {
+            audioToggle.style.display = 'none';
           }
         }, 1000);
 
         // Error handling
         window.addEventListener('error', function(e) {
-          console.error('AR Experience Error:', e.error);
+          console.error('Multiple Image AR Experience Error:', e.error);
         });
 
-        // Prevent context menu on long press
+        // Prevent context menu
         document.addEventListener('contextmenu', function(e) {
           e.preventDefault();
         });

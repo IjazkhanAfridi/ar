@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <title>AR Experience - Coordinate Test Experience</title>
+    <title>AR Experience - newwwwwwwwwwwttt</title>
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     <style>
@@ -68,12 +68,14 @@
     </div>
     
     <a-scene
-      mindar-image="imageTargetSrc: /uploads/mind-files/test.mind; filterMinCF:0.0001; filterBeta: 0.01; showStats: false"
+      mindar-image="imageTargetSrc: /uploads/mind-files/experience_15.mind; filterMinCF:0.0001; filterBeta: 0.01; showStats: false"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
     >
       <a-assets>
-        <img id="target-0-asset-obj_test_123" src="/uploads/test-image.jpg" crossorigin="anonymous" />
+        <a-asset-item id="target-0-asset-1759348971894p9lz8ocr5" src="/uploads/1759348971670-Terracotta_Harmony_0516102104_texture.glb"></a-asset-item>
+        <a-asset-item id="target-1-asset-175934903445915aft9y9g" src="/uploads/1759349034279-Terracotta_Harmony_0516102104_texture.glb"></a-asset-item>
+        <img id="target-1-asset-175934907241057rmado7d" src="/uploads/1759349072233-133901123948891576.jpg" crossorigin="anonymous" />
       </a-assets>
 
       <a-camera 
@@ -86,11 +88,26 @@
       ></a-camera>
 
       <a-entity mindar-image-target="targetIndex: 0">
-        <a-image 
-            src="#target-0-asset-obj_test_123" 
-            position="0.300 0.310 0.000" 
+        <a-entity 
+            gltf-model="#target-0-asset-1759348971894p9lz8ocr5" 
+            position="-0.159 0.130 0.014" 
             rotation="90.0 0.0 0.0" 
-            scale="0.600 0.600 0.600"
+            scale="0.468 0.468 0.468"
+          ></a-entity>
+      </a-entity>
+
+      <a-entity mindar-image-target="targetIndex: 1">
+        <a-entity 
+            gltf-model="#target-1-asset-175934903445915aft9y9g" 
+            position="-0.573 0.244 -0.006" 
+            rotation="90.0 0.0 0.0" 
+            scale="0.393 0.393 0.393"
+          ></a-entity>
+        <a-image 
+            src="#target-1-asset-175934907241057rmado7d" 
+            position="0.802 0.158 -0.029" 
+            rotation="17.2 0.0 0.3" 
+            scale="0.926 0.926 0.926"
             side="double"
             crossorigin="anonymous"
           ></a-image>
@@ -111,7 +128,6 @@
 
         // Hide loading when AR is ready
         scene.addEventListener('loaded', function() {
-          console.log('Multiple Image AR Scene loaded');
           setTimeout(() => {
             if (loading) {
               loading.style.display = 'none';
@@ -131,7 +147,6 @@
           });
 
           target.addEventListener('targetLost', function() {
-            console.log('AR Target', index, 'lost!');
           });
         });
 

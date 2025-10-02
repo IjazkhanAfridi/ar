@@ -1,6 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Form } from '@/components/ui/form';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -8,18 +14,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Form } from '@/components/ui/form';
-import { useToast } from '@/hooks/use-toast';
-import { useMutation } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { SceneEditor } from '@/components/scene-editor';
 import { ARViewer } from '@/components/ar-viewer';
-import { Save, ArrowLeft, Target, Eye, Layers } from 'lucide-react';
 import { insertExperienceSchema } from '@/lib/schema';
-import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
 import { buildApiUrl } from '@/utils/config.js';
+import { ArrowLeft, Save, Eye, Layers } from 'lucide-react';
+import { API_BASE_URL } from '@/utils/config.js';
 
 const DEFAULT_SCENE_CONFIG = {
   position: { x: 0, y: 0, z: 0 },
@@ -75,71 +76,43 @@ const cloneSceneConfig = (config = DEFAULT_SCENE_CONFIG) => ({
   sceneObjects: sanitizeSceneObjects(config.sceneObjects),
 });
 
-const getImageDimensions = (src) => {
-  if (!src) {
-    return Promise.resolve(null);
+const resolveAssetUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
   }
-
-  return new Promise((resolve) => {
-    const image = new Image();
-    image.onload = () => {
-      resolve({
-        width: image.width,
-        height: image.height,
-        aspectRatio:
-          image.width && image.height ? image.width / image.height : 1,
-      });
-    };
-    image.onerror = () => resolve(null);
-    image.crossOrigin = 'anonymous';
-    image.src = src;
-  });
+  return buildApiUrl(url);
 };
 
-const MultipleImageCreate = () => {
-  const location = useLocation();
+const deepEqual = (a, b) => {
+  if (a === b) return true;
+  if (a == null || b == null) return a === b;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch (error) {
+    console.warn('deepEqual comparison failed:', error);
+    return false;
+  }
+};
+
+export default function MultipleImageEdit() {
+  const { id } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
+
   const mindFileRef = useRef(null);
-
-  const {
-    mindFileData,
-    originalImages = [],
-    fileUrls = [],
-    totalImages = 0,
-  } = location?.state || {};
-
-  const [markerImage, setMarkerImage] = useState('');
-  const [markerDimensions, setMarkerDimensions] = useState(null);
+  const [uploadedMindFile, setUploadedMindFile] = useState('');
+  const [experienceMindFileUrl, setExperienceMindFileUrl] = useState('');
   const [sceneConfig, setSceneConfig] = useState(DEFAULT_SCENE_CONFIG);
   const [targetsConfig, setTargetsConfig] = useState([]);
   const [selectedTargetIndex, setSelectedTargetIndex] = useState(0);
+  const [markerImage, setMarkerImage] = useState('');
+  const [markerDimensions, setMarkerDimensions] = useState(null);
   const [transformMode, setTransformMode] = useState('translate');
-  const [uploadedMindFile, setUploadedMindFile] = useState();
-  const [experienceUrl, setExperienceUrl] = useState();
   const [showARViewer, setShowARViewer] = useState(false);
   const [viewerMindFileUrl, setViewerMindFileUrl] = useState(null);
-
-  const updateTargetConfig = useCallback((targetIndex, updater) => {
-    setTargetsConfig((prev) => {
-      const target = prev[targetIndex];
-      if (!target) return prev;
-
-      const next = [...prev];
-      const updates = typeof updater === 'function' ? updater(target) : updater;
-      const mergedTarget = {
-        ...target,
-        ...updates,
-      };
-
-      if (updates?.sceneConfig) {
-        mergedTarget.sceneConfig = cloneSceneConfig(updates.sceneConfig);
-      }
-
-      next[targetIndex] = mergedTarget;
-      return next;
-    });
-  }, []);
+  const [experienceUrl, setExperienceUrl] = useState();
 
   const form = useForm({
     resolver: zodResolver(insertExperienceSchema),
@@ -152,84 +125,135 @@ const MultipleImageCreate = () => {
     },
   });
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const initialiseTargets = async () => {
-      if (!originalImages.length) {
-        setTargetsConfig([]);
-        return;
-      }
-
-      const targets = await Promise.all(
-        originalImages.map(async (image, index) => {
-          const source = fileUrls[index] || image.preview || image.url || '';
-          const dimensions = await getImageDimensions(source);
-          return {
-            id: `target-${index}`,
-            name: image.name || `Target ${index + 1}`,
-            markerImage: source,
-            markerDimensions: dimensions,
-            sceneConfig: cloneSceneConfig(DEFAULT_SCENE_CONFIG),
-          };
-        })
-      );
-
-      if (!isMounted) return;
-
-      setTargetsConfig(targets);
-      setSelectedTargetIndex(0);
-
-      const firstTarget = targets[0];
-      if (firstTarget) {
-        setSceneConfig(cloneSceneConfig(firstTarget.sceneConfig));
-        setMarkerImage(firstTarget.markerImage || '');
-        setMarkerDimensions(firstTarget.markerDimensions || null);
-        if (firstTarget.markerImage) {
-          form.setValue('markerImage', firstTarget.markerImage);
-        }
-        if (firstTarget.markerDimensions) {
-          form.setValue('markerDimensions', firstTarget.markerDimensions);
-        }
-      } else {
-        setSceneConfig(DEFAULT_SCENE_CONFIG);
-      }
-    };
-
-    initialiseTargets();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [originalImages, fileUrls, form]);
-
-  useEffect(() => {
-    if (!mindFileData) return;
-
-    let cancelled = false;
-
-    fetch(mindFileData)
-      .then((res) => res.blob())
-      .then((blob) => {
-        if (cancelled) return;
-        const mindFile = new File([blob], 'multiple-targets.mind', {
-          type: 'application/octet-stream',
-        });
-        mindFileRef.current = mindFile;
-        setUploadedMindFile(mindFile.name);
-      })
-      .catch((error) => {
-        console.error('Error processing mind file data:', error);
+  const {
+    data: experience,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ['experience', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const response = await fetch(buildApiUrl(`/api/experiences/${id}`), {
+        credentials: 'include',
       });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [mindFileData]);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch experience: ${response.status} ${errorText}`);
+      }
+      const result = await response.json();
+      return result.data?.experience || result.experience || result;
+    },
+  });
 
   useEffect(() => {
-    form.setValue('contentConfig', cloneSceneConfig(sceneConfig));
-  }, [sceneConfig, form]);
+    if (!experience) return;
+
+    if (!experience.isMultipleTargets) {
+      toast({
+        title: 'Redirecting to single experience editor',
+        description: 'This experience uses a single marker.',
+      });
+      navigate(`/edit-experience/${id}`);
+      return;
+    }
+
+    const normalizedTargets = (experience.targetsConfig || []).map((target, index) => {
+      const sceneObjects = sanitizeSceneObjects(target.sceneObjects || []);
+      return {
+        id: target.id || `target-${index}`,
+        name: target.name || `Target ${index + 1}`,
+        markerImage: resolveAssetUrl(target.markerImage || ''),
+        markerDimensions: target.markerDimensions || null,
+        sceneConfig: cloneSceneConfig({
+          ...DEFAULT_SCENE_CONFIG,
+          sceneObjects,
+        }),
+      };
+    });
+
+    const fallbackTarget = {
+      id: 'target-0',
+      name: 'Target 1',
+      markerImage: resolveAssetUrl(experience.markerImage || ''),
+      markerDimensions: experience.markerDimensions || null,
+      sceneConfig: cloneSceneConfig(DEFAULT_SCENE_CONFIG),
+    };
+
+    const preparedTargets = normalizedTargets.length
+      ? normalizedTargets
+      : [fallbackTarget];
+
+    setTargetsConfig(preparedTargets);
+    setSelectedTargetIndex(0);
+
+    const firstTarget = preparedTargets[0];
+    setSceneConfig(cloneSceneConfig(firstTarget.sceneConfig));
+    setMarkerImage(firstTarget.markerImage || '');
+    setMarkerDimensions(firstTarget.markerDimensions || null);
+
+    form.reset({
+      title: experience.title,
+      description: experience.description,
+      markerImage: firstTarget.markerImage || '',
+      markerDimensions: firstTarget.markerDimensions || null,
+      contentConfig: cloneSceneConfig(firstTarget.sceneConfig),
+    });
+
+    if (experience.mindFile) {
+      setUploadedMindFile(experience.mindFile.split('/').pop() || 'Existing mind file');
+      setExperienceMindFileUrl(resolveAssetUrl(experience.mindFile));
+    } else {
+      setUploadedMindFile('');
+      setExperienceMindFileUrl('');
+    }
+  }, [experience, form, id, navigate, toast]);
+
+  const updateTargetConfig = useCallback((targetIndex, updater) => {
+    setTargetsConfig((prev) => {
+      const target = prev[targetIndex];
+      if (!target) return prev;
+
+      const updates = typeof updater === 'function' ? updater(target) : updater;
+      const mergedTarget = {
+        ...target,
+        ...updates,
+      };
+
+      if (updates?.sceneConfig) {
+        mergedTarget.sceneConfig = cloneSceneConfig(updates.sceneConfig);
+      }
+
+      if (deepEqual(target, mergedTarget)) {
+        return prev;
+      }
+
+      const next = [...prev];
+      next[targetIndex] = mergedTarget;
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!targetsConfig.length) return;
+
+    const nextTarget =
+      targetsConfig[selectedTargetIndex] || targetsConfig[0];
+    if (!nextTarget) return;
+
+    const nextSceneConfig = cloneSceneConfig(
+      nextTarget.sceneConfig || DEFAULT_SCENE_CONFIG
+    );
+    const nextMarkerImage = nextTarget.markerImage || '';
+    const nextMarkerDimensions = nextTarget.markerDimensions || null;
+
+    setSceneConfig((prev) =>
+      deepEqual(prev, nextSceneConfig) ? prev : nextSceneConfig
+    );
+    setMarkerImage((prev) => (prev === nextMarkerImage ? prev : nextMarkerImage));
+    setMarkerDimensions((prev) =>
+      deepEqual(prev, nextMarkerDimensions) ? prev : nextMarkerDimensions
+    );
+  }, [selectedTargetIndex, targetsConfig]);
 
   useEffect(() => {
     if (markerImage) {
@@ -241,15 +265,8 @@ const MultipleImageCreate = () => {
   }, [markerImage, markerDimensions, form]);
 
   useEffect(() => {
-    if (!targetsConfig.length) return;
-
-    const target = targetsConfig[selectedTargetIndex] || targetsConfig[0];
-    if (!target) return;
-
-    setSceneConfig(cloneSceneConfig(target.sceneConfig || DEFAULT_SCENE_CONFIG));
-    setMarkerImage(target.markerImage || '');
-    setMarkerDimensions(target.markerDimensions || null);
-  }, [selectedTargetIndex, targetsConfig.length]);
+    form.setValue('contentConfig', cloneSceneConfig(sceneConfig));
+  }, [sceneConfig, form]);
 
   const serializedTargets = useMemo(
     () =>
@@ -278,25 +295,13 @@ const MultipleImageCreate = () => {
     0
   );
 
-  const handleSceneConfigChange = (config) => {
-    const clonedConfig = cloneSceneConfig(config);
-    setSceneConfig(clonedConfig);
-    updateTargetConfig(selectedTargetIndex, (current) => ({
-      markerImage: markerImage || current.markerImage,
-      markerDimensions: markerDimensions || current.markerDimensions,
-      sceneConfig: clonedConfig,
-    }));
-  };
-
   const handleMindFileUpload = (file) => {
     if (!file) return;
-    setUploadedMindFile(file.name);
     mindFileRef.current = file;
+    setUploadedMindFile(file.name);
   };
 
   const handleMarkerImageUpload = (markerData) => {
-    if (!targetsConfig[selectedTargetIndex]) return;
-
     if (typeof markerData === 'string') {
       setMarkerImage(markerData);
       form.setValue('markerImage', markerData);
@@ -324,19 +329,43 @@ const MultipleImageCreate = () => {
     }
   };
 
-  const handleTargetChange = (targetIndex) => {
-    if (targetIndex === selectedTargetIndex) return;
+  const handleSceneConfigChange = (config) => {
+    const cloned = cloneSceneConfig(config);
+    setSceneConfig(cloned);
+    updateTargetConfig(selectedTargetIndex, (current) => ({
+      markerImage: markerImage || current.markerImage,
+      markerDimensions: markerDimensions || current.markerDimensions,
+      sceneConfig: cloned,
+    }));
+  };
 
+  const handleTargetChange = (index) => {
+    if (index === selectedTargetIndex) return;
     updateTargetConfig(selectedTargetIndex, {
       markerImage,
       markerDimensions,
       sceneConfig,
     });
-    setSelectedTargetIndex(targetIndex);
+    setSelectedTargetIndex(index);
   };
 
-  const handleShowARViewer = () => {
-    if (!mindFileRef.current) {
+  const handleShowARViewer = async () => {
+    const cleanup = () => {
+      if (viewerMindFileUrl) {
+        URL.revokeObjectURL(viewerMindFileUrl);
+      }
+    };
+
+    cleanup();
+
+    if (mindFileRef.current) {
+      const objectUrl = URL.createObjectURL(mindFileRef.current);
+      setViewerMindFileUrl(objectUrl);
+      setShowARViewer(true);
+      return;
+    }
+
+    if (!experienceMindFileUrl) {
       toast({
         title: 'Please upload a .mind file first',
         variant: 'destructive',
@@ -344,12 +373,24 @@ const MultipleImageCreate = () => {
       return;
     }
 
-    if (viewerMindFileUrl) {
-      URL.revokeObjectURL(viewerMindFileUrl);
+    try {
+      const response = await fetch(experienceMindFileUrl, {
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch existing mind file');
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      setViewerMindFileUrl(objectUrl);
+      setShowARViewer(true);
+    } catch (error) {
+      console.error('Error loading existing mind file:', error);
+      toast({
+        title: 'Unable to preview mind file',
+        variant: 'destructive',
+      });
     }
-    const objectUrl = URL.createObjectURL(mindFileRef.current);
-    setViewerMindFileUrl(objectUrl);
-    setShowARViewer(true);
   };
 
   const handleCloseViewer = () => {
@@ -368,25 +409,7 @@ const MultipleImageCreate = () => {
     };
   }, [viewerMindFileUrl]);
 
-  const handleFormSubmit = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-  };
-
-  const redirectToARSuccess = (experienceUrlValue, projectTitle) => {
-    const fullExperienceUrl = experienceUrlValue
-      ? `${buildApiUrl('')}${experienceUrlValue}`
-      : '';
-
-    const params = new URLSearchParams({
-      experienceUrl: fullExperienceUrl,
-      projectNumber: projectTitle || 'generated',
-    });
-
-    navigate(`/ar-success?${params.toString()}`);
-  };
-
-  const createMutation = useMutation({
+  const updateMutation = useMutation({
     mutationFn: async (values) => {
       const payloadTargets = serializedTargets.map((target) => ({
         id: target.id,
@@ -412,16 +435,14 @@ const MultipleImageCreate = () => {
       );
       formData.append('targetsConfig', JSON.stringify(payloadTargets));
 
-      if (!mindFileRef.current) {
-        throw new Error('Mind file is required but not found');
+      if (mindFileRef.current) {
+        formData.append('mindFile', mindFileRef.current);
       }
 
-      formData.append('mindFile', mindFileRef.current);
-
       const response = await fetch(
-        buildApiUrl('/api/experiences/multiple-image'),
+        buildApiUrl(`/api/experiences/multiple-image/${id}`),
         {
-          method: 'POST',
+          method: 'PUT',
           body: formData,
           credentials: 'include',
         }
@@ -430,23 +451,23 @@ const MultipleImageCreate = () => {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
-          errorData.message || 'Failed to create multiple image experience'
+          errorData.message || 'Failed to update multiple image experience'
         );
       }
 
       return response.json();
     },
     onSuccess: (data) => {
-      toast({ title: 'Multiple image experience created successfully' });
+      toast({ title: 'Multiple image experience updated successfully' });
+      queryClient.invalidateQueries({ queryKey: ['experiences'] });
+      queryClient.invalidateQueries({ queryKey: ['experience', id] });
       const experienceUrlValue =
-        data.data?.experienceUrl || data.experienceUrl || '';
-      const projectTitle = data.data?.experience?.title || data.title;
+        data.data?.experience?.experienceUrl || data.experienceUrl || '';
       setExperienceUrl(experienceUrlValue);
-      redirectToARSuccess(experienceUrlValue, projectTitle);
     },
     onError: (error) => {
       toast({
-        title: 'Error creating multiple image experience',
+        title: 'Error updating experience',
         description:
           error instanceof Error ? error.message : 'Please try again',
         variant: 'destructive',
@@ -455,14 +476,6 @@ const MultipleImageCreate = () => {
   });
 
   const onSubmit = (values) => {
-    if (!mindFileRef.current) {
-      toast({
-        title: 'Please upload a .mind file',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     if (!serializedTargets.length) {
       toast({
         title: 'Please add at least one marker image',
@@ -483,24 +496,70 @@ const MultipleImageCreate = () => {
       return;
     }
 
-    createMutation.mutate(values);
+    updateMutation.mutate(values);
   };
 
-  const handleCreateExperience = (event) => {
+  const handleFormSubmit = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const handleUpdateExperience = (event) => {
     event.preventDefault();
     event.stopPropagation();
     form.handleSubmit(onSubmit)();
   };
 
-  if (!originalImages.length) {
+  const fullExperienceUrl = experienceUrl
+    ? experienceUrl.startsWith('http')
+      ? experienceUrl
+      : `${API_BASE_URL}${experienceUrl}`
+    : '';
+
+  if (isLoading) {
     return (
-      <div className='min-h-screen bg-slate-900 text-white flex items-center justify-center'>
-        <div className='text-center space-y-4'>
-          <h2 className='text-2xl font-bold'>No Images Found</h2>
-          <p className='text-slate-400'>Please upload images first.</p>
-          <Button onClick={() => navigate('/multiple-image-tracking')}>
-            Go Back to Upload
-          </Button>
+      <div className='flex flex-col bg-slate-800 h-screen'>
+        <div className='flex items-center justify-center h-full'>
+          <div className='animate-pulse text-white'>Loading experience...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className='flex flex-col bg-slate-800 h-screen'>
+        <div className='flex items-center justify-center h-full'>
+          <div className='text-center text-white'>
+            <h2 className='text-xl font-semibold mb-2 text-red-400'>Error Loading Experience</h2>
+            <p className='text-slate-400 mb-4'>
+              {error.message || 'Failed to load experience data'}
+            </p>
+            <div className='flex gap-2 justify-center'>
+              <Button onClick={() => navigate('/experiences')} variant='outline'>
+                <ArrowLeft className='h-4 w-4 mr-2' />
+                Back to Experiences
+              </Button>
+              <Button onClick={() => window.location.reload()}>Try Again</Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!experience) {
+    return (
+      <div className='flex flex-col bg-slate-800 h-screen'>
+        <div className='flex items-center justify-center h-full'>
+          <div className='text-center text-white'>
+            <h2 className='text-xl font-semibold mb-2 text-red-400'>Experience not found</h2>
+            <p className='text-slate-400 mb-4'>The experience you're trying to edit doesn't exist.</p>
+            <Button onClick={() => navigate('/experiences')}>
+              <ArrowLeft className='h-4 w-4 mr-2' />
+              Back to Experiences
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -512,23 +571,21 @@ const MultipleImageCreate = () => {
         <div className='flex items-center gap-4'>
           <Button
             variant='ghost'
-            onClick={() => navigate('/multiple-image-tracking')}
+            onClick={() => navigate('/experiences')}
             className='text-white hover:bg-slate-700'
           >
             <ArrowLeft className='h-4 w-4 mr-2' />
-            Back to Upload
+            Back to Experiences
           </Button>
           <div>
-            <h1 className='text-xl font-bold text-white'>
-              Create Multi-Target AR Experience
-            </h1>
+            <h1 className='text-xl font-bold text-white'>Edit Multi-Target AR Experience</h1>
             <p className='text-sm text-slate-400'>
-              Target {selectedTargetIndex + 1} of {serializedTargets.length || totalImages}{' '}
+              Target {selectedTargetIndex + 1} of {serializedTargets.length}{' '}
               · {totalObjects} total objects
             </p>
           </div>
         </div>
-        <div className='flex items-center gap-4'>
+        <div className='flex items-center gap-3'>
           <Button
             variant='outline'
             size='sm'
@@ -538,10 +595,20 @@ const MultipleImageCreate = () => {
             <Eye className='h-4 w-4 mr-2' />
             Preview AR
           </Button>
-          <div className='flex items-center gap-2'>
-            <Target className='h-5 w-5 text-blue-400' />
-            <span className='text-sm text-white'>Multi-Target Mode</span>
-          </div>
+          <Button
+            onClick={handleUpdateExperience}
+            disabled={updateMutation.isPending}
+            className='bg-blue-600 hover:bg-blue-700'
+          >
+            {updateMutation.isPending ? (
+              'Updating...'
+            ) : (
+              <>
+                <Save className='h-4 w-4 mr-2' />
+                Update Experience
+              </>
+            )}
+          </Button>
         </div>
       </div>
 
@@ -563,14 +630,12 @@ const MultipleImageCreate = () => {
                 onClick={() => handleTargetChange(index)}
               >
                 <img
-                  src={target.markerImage}
+                  src={resolveAssetUrl(target.markerImage)}
                   alt={target.name}
                   className='w-10 h-10 rounded object-cover border border-slate-600'
                 />
                 <div>
-                  <h4 className='text-sm font-medium text-white'>
-                    {target.name}
-                  </h4>
+                  <h4 className='text-sm font-medium text-white'>{target.name}</h4>
                   <p className='text-xs text-slate-400'>
                     {(target.sceneConfig?.sceneObjects?.length || 0)} objects
                   </p>
@@ -602,17 +667,13 @@ const MultipleImageCreate = () => {
               </Badge>
             </div>
             <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
-              {targetsConfig.map((target, index) => (
+              {targetsConfig.map((target) => (
                 <div
                   key={`overview-${target.id}`}
-                  className={`relative rounded-lg border overflow-hidden ${
-                    selectedTargetIndex === index
-                      ? 'border-blue-500/60 shadow-blue-500/30 shadow-lg'
-                      : 'border-slate-700'
-                  }`}
+                  className='relative rounded-lg border border-slate-700 overflow-hidden'
                 >
                   <img
-                    src={target.markerImage}
+                    src={resolveAssetUrl(target.markerImage)}
                     alt={target.name}
                     className='w-full h-36 object-cover'
                   />
@@ -646,54 +707,28 @@ const MultipleImageCreate = () => {
         </form>
       </Form>
 
-      <div className='fixed bottom-6 right-6 z-50'>
-        <Button
-          type='button'
-          onClick={handleCreateExperience}
-          disabled={createMutation.isPending}
-          className='h-14 px-8 text-lg font-semibold bg-blue-600 hover:bg-blue-700 shadow-2xl border-2 border-blue-500 transition-all duration-200 hover:scale-105'
-        >
-          {createMutation.isPending ? (
-            <>
-              <div className='animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3'></div>
-              Creating...
-            </>
-          ) : (
-            <>
-              <Save className='h-5 w-5 mr-2' />
-              Create Multi-Target Experience
-            </>
-          )}
-        </Button>
-      </div>
-
       <Dialog
         open={!!experienceUrl}
         onOpenChange={() => setExperienceUrl(undefined)}
       >
         <DialogContent className='bg-slate-800 border-slate-600 text-white'>
           <DialogHeader>
-            <DialogTitle>
-              Multi-Target Experience Created Successfully!
-            </DialogTitle>
+            <DialogTitle>Experience Updated Successfully!</DialogTitle>
             <DialogDescription className='text-slate-400'>
-              Your multi-target AR experience is now ready. Users can scan any
-              of the marker images to reveal the corresponding AR content.
+              Your multi-target AR experience is updated. Use the link below to access it.
             </DialogDescription>
           </DialogHeader>
           <div className='flex flex-col gap-4'>
             <div className='p-4 bg-slate-900 rounded-lg break-all border border-slate-700'>
-              <code>{experienceUrl && window.location.origin + experienceUrl}</code>
+              <code>{fullExperienceUrl}</code>
             </div>
             <div className='flex justify-end gap-2'>
               <Button
                 variant='outline'
                 className='border-slate-600 text-slate-300 hover:bg-slate-700'
                 onClick={() => {
-                  if (experienceUrl) {
-                    navigator.clipboard.writeText(
-                      window.location.origin + experienceUrl
-                    );
+                  if (fullExperienceUrl) {
+                    navigator.clipboard.writeText(fullExperienceUrl);
                     toast({ title: 'Link copied to clipboard' });
                   }
                 }}
@@ -703,11 +738,8 @@ const MultipleImageCreate = () => {
               <Button
                 className='bg-blue-600 hover:bg-blue-700 text-white'
                 onClick={() => {
-                  if (experienceUrl) {
-                    window.open(
-                      window.location.origin + experienceUrl,
-                      '_blank'
-                    );
+                  if (fullExperienceUrl) {
+                    window.open(fullExperienceUrl, '_blank');
                   }
                 }}
               >
@@ -728,6 +760,4 @@ const MultipleImageCreate = () => {
       )}
     </div>
   );
-};
-
-export default MultipleImageCreate;
+}

@@ -16,6 +16,10 @@ import {
 } from '../utils/experienceGenerator.js';
 import fs from 'fs';
 import path from 'path';
+import {
+  ensureSceneConfig,
+  sanitizeTargets,
+} from '../utils/experienceNormalizer.js';
 
 class ExperienceService {
   /**
@@ -385,15 +389,22 @@ class ExperienceService {
       // Parse JSON strings if they exist
       const processedExperience = {
         ...experience,
-        contentConfig: typeof experience.contentConfig === 'string' 
-          ? JSON.parse(experience.contentConfig) 
-          : experience.contentConfig,
-        markerDimensions: typeof experience.markerDimensions === 'string'
-          ? JSON.parse(experience.markerDimensions)
-          : experience.markerDimensions,
-        targetsConfig: experience.targetsConfig && typeof experience.targetsConfig === 'string'
-          ? JSON.parse(experience.targetsConfig)
-          : experience.targetsConfig
+        contentConfig: ensureSceneConfig(
+          typeof experience.contentConfig === 'string'
+            ? JSON.parse(experience.contentConfig)
+            : experience.contentConfig
+        ),
+        markerDimensions:
+          typeof experience.markerDimensions === 'string'
+            ? JSON.parse(experience.markerDimensions)
+            : experience.markerDimensions,
+        targetsConfig: experience.targetsConfig
+          ? sanitizeTargets(
+              typeof experience.targetsConfig === 'string'
+                ? JSON.parse(experience.targetsConfig)
+                : experience.targetsConfig
+            )
+          : [],
       };
 
       const experienceUrl = saveExperienceHtml(processedExperience);
@@ -417,15 +428,20 @@ class ExperienceService {
       // Parse JSON strings if they exist
       const processedExperience = {
         ...experience,
-        contentConfig: typeof experience.contentConfig === 'string' 
-          ? JSON.parse(experience.contentConfig) 
-          : experience.contentConfig,
-        markerDimensions: typeof experience.markerDimensions === 'string'
-          ? JSON.parse(experience.markerDimensions)
-          : experience.markerDimensions,
-        targetsConfig: experience.targetsConfig && typeof experience.targetsConfig === 'string'
-          ? JSON.parse(experience.targetsConfig)
-          : experience.targetsConfig
+        contentConfig: ensureSceneConfig(
+          typeof experience.contentConfig === 'string'
+            ? JSON.parse(experience.contentConfig)
+            : experience.contentConfig
+        ),
+        markerDimensions:
+          typeof experience.markerDimensions === 'string'
+            ? JSON.parse(experience.markerDimensions)
+            : experience.markerDimensions,
+        targetsConfig: sanitizeTargets(
+          typeof experience.targetsConfig === 'string'
+            ? JSON.parse(experience.targetsConfig)
+            : experience.targetsConfig
+        ),
       };
 
       const experienceUrl = saveMultipleImageExperienceHtml(processedExperience);

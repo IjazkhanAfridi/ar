@@ -30,6 +30,7 @@ const baseUpload = multer({
   storage,
   limits: {
     fileSize: config.MAX_FILE_SIZE,
+    fieldSize: config.MAX_FIELD_SIZE,
   },
   fileFilter,
 });
@@ -144,5 +145,8 @@ export function generateUniqueFilename(originalName) {
 export const uploadAny = multer({
   storage,
   fileFilter,
-  limits: { fileSize: config.MAX_FILE_SIZE },
+  limits: {
+    fileSize: config.MAX_FILE_SIZE,
+    fieldSize: config.MAX_FIELD_SIZE,
+  },
 }).any();

@@ -21,6 +21,7 @@ import EditExperience from './pages/edit-experience';
 import MultipleImageTracking from './pages/MultipleImageTracking';
 import MultipleImageConfirmation from './pages/MultipleImageConfirmation';
 import MultipleImageCreate from './pages/MultipleImageCreate';
+import MultipleImageEdit from './pages/MultipleImageEdit';
 
 export default function App() {
   return (
@@ -119,6 +120,14 @@ export default function App() {
                 element={
                   <ProtectedRoute restrictAdmin>
                     <MultipleImageCreate />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path='/multiple-image-edit/:id'
+                element={
+                  <ProtectedRoute restrictAdmin>
+                    <MultipleImageEdit />
                   </ProtectedRoute>
                 }
               />

@@ -31,15 +31,46 @@ export default function Experiences() {
     },
   });
 
-  const getMarkerImageUrl = (markerImage, experienceId) => {
-    if (markerImage && markerImage.startsWith('data:image/')) {
-      return markerImage;
+  const resolveImageUrl = (value, experienceId) => {
+    if (!value) {
+      return `${API_BASE_URL}/api/experiences/markers/${experienceId}.png`;
     }
-    return `${API_BASE_URL}/api/experiences/markers/${experienceId}.png`;
+    if (value.startsWith('data:image/')) return value;
+    if (value.startsWith('http://') || value.startsWith('https://')) return value;
+    return buildApiUrl(value);
+  };
+
+  const getMarkerImageUrl = (experience) => {
+    if (experience.isMultipleTargets && experience.targetsConfig?.length) {
+      const targetMarker = experience.targetsConfig[0]?.markerImage;
+      return resolveImageUrl(targetMarker, experience.id);
+    }
+    return resolveImageUrl(experience.markerImage, experience.id);
+  };
+
+  const getTotalObjects = (experience) => {
+    if (experience.isMultipleTargets && Array.isArray(experience.targetsConfig)) {
+      return experience.targetsConfig.reduce(
+        (sum, target) => sum + (target?.sceneObjects?.length || 0),
+        0
+      );
+    }
+    return experience.contentConfig?.sceneObjects?.length || 0;
+  };
+
+  const getMarkerCount = (experience) => {
+    if (experience.isMultipleTargets && Array.isArray(experience.targetsConfig)) {
+      return experience.targetsConfig.length;
+    }
+    return 1;
   };
 
   const handleEditExperience = (experience) => {
     console.log('Navigating to edit experience:', experience.id);
+    if (experience.isMultipleTargets) {
+      navigate(`/multiple-image-edit/${experience.id}`);
+      return;
+    }
     navigate(`/edit-experience/${experience.id}`);
   };
 
@@ -197,7 +228,7 @@ export default function Experiences() {
             >
               <div className='aspect-video bg-slate-800 relative overflow-hidden'>
                 <img
-                  src={getMarkerImageUrl(experience.markerImage, experience.id)}
+                  src={getMarkerImageUrl(experience)}
                   alt={experience.title}
                   className='w-full h-full object-cover bg-slate-700'
                   onError={(e) => {
@@ -205,21 +236,25 @@ export default function Experiences() {
                       'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y0ZjRmNCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTk5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5BUiBFeHBlcmllbmNlPC90ZXh0Pjwvc3ZnPg==';
                   }}
                 />
-                <div className='absolute top-2 right-2'>
+                <div className='absolute top-2 right-2 flex flex-col gap-2 items-end'>
                   <Badge
                     variant='secondary'
                     className='bg-slate-800 text-white border-0'
                   >
                     AR
                   </Badge>
+                  {experience.isMultipleTargets && (
+                    <Badge className='bg-blue-500/20 text-blue-200 border-0 text-xs'>
+                      {getMarkerCount(experience)} markers
+                    </Badge>
+                  )}
                 </div>
                 <div className='absolute bottom-2 left-2'>
                   <Badge
                     variant='secondary'
                     className='bg-slate-800 text-white border-0 text-xs'
                   >
-                    {experience.contentConfig?.sceneObjects?.length || 0}{' '}
-                    objects
+                    {getTotalObjects(experience)} objects
                   </Badge>
                 </div>
               </div>
