@@ -3,6 +3,41 @@ import { generateToken } from '../middleware/auth.js';
 import { config } from '../config/config.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 
+const getAuthCookieOptions = (req) => {
+  const forwardedProto = req.headers['x-forwarded-proto']?.split(',')[0]?.trim();
+  const autoSecure =
+    config.NODE_ENV === 'production' && (req.secure || forwardedProto === 'https');
+  const secureFlag =
+    config.COOKIE_SECURE !== undefined ? config.COOKIE_SECURE : autoSecure;
+
+  const options = {
+    httpOnly: true,
+    secure: Boolean(secureFlag),
+    sameSite: config.COOKIE_SAME_SITE,
+    maxAge: config.COOKIE_MAX_AGE,
+  };
+
+  if (options.sameSite === 'none') {
+    options.secure = true;
+  }
+
+  if (config.COOKIE_DOMAIN) {
+    options.domain = config.COOKIE_DOMAIN;
+  }
+
+  return options;
+};
+
+const setAuthCookie = (res, req, token) => {
+  const options = getAuthCookieOptions(req);
+  res.cookie('auth_token', token, options);
+};
+
+const clearAuthCookie = (res, req) => {
+  const { maxAge, ...options } = getAuthCookieOptions(req);
+  res.clearCookie('auth_token', options);
+};
+
 class AuthController {
   /**
    * Register a new user
@@ -32,12 +67,7 @@ class AuthController {
     const token = generateToken(user);
 
     // Set cookie
-    res.cookie('auth_token', token, {
-      httpOnly: true,
-      secure: config.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: config.COOKIE_MAX_AGE,
-    });
+  setAuthCookie(res, req, token);
 
     res.status(201).json({
       success: true,
@@ -99,12 +129,7 @@ class AuthController {
     const token = generateToken(userWithoutPassword);
 
     // Set cookie
-    res.cookie('auth_token', token, {
-      httpOnly: true,
-      secure: config.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: config.COOKIE_MAX_AGE,
-    });
+  setAuthCookie(res, req, token);
 
     res.json({
       success: true,
@@ -120,7 +145,7 @@ class AuthController {
    * Logout user
    */
   logout = asyncHandler(async (req, res) => {
-    res.clearCookie('auth_token');
+    clearAuthCookie(res, req);
 
     res.json({
       success: true,
@@ -208,22 +233,6 @@ class AuthController {
    * Verify token - check if user is authenticated
    */
   verifyToken = asyncHandler(async (req, res) => {
-    const user = await userService.getUserProfile(req.user.id);
-
-    res.json({
-      success: true,
-      data: {
-        user,
-        isAuthenticated: true,
-      },
-    });
-  });
-
-  /**
-   * Verify token (for frontend to check if user is authenticated)
-   */
-  verifyToken = asyncHandler(async (req, res) => {
-    // If we reach here, the auth middleware has already verified the token
     const user = await userService.getUserProfile(req.user.id);
 
     res.json({

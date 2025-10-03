@@ -2,6 +2,9 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const sameSiteEnv = process.env.COOKIE_SAME_SITE?.toLowerCase();
+const allowedSameSite = ['lax', 'strict', 'none'];
+
 export const config = {
   // Server
   PORT: process.env.PORT || 5000,
@@ -28,7 +31,16 @@ export const config = {
 
   // Cookie settings
   COOKIE_SECRET: process.env.COOKIE_SECRET || 'your-cookie-secret',
-  COOKIE_MAX_AGE: parseInt(process.env.COOKIE_MAX_AGE) || 7 * 24 * 60 * 60 * 1000, // 7 days
+  COOKIE_MAX_AGE:
+    parseInt(process.env.COOKIE_MAX_AGE) || 7 * 24 * 60 * 60 * 1000, // 7 days
+  COOKIE_SAME_SITE: allowedSameSite.includes(sameSiteEnv)
+    ? sameSiteEnv
+    : 'lax',
+  COOKIE_DOMAIN: process.env.COOKIE_DOMAIN || undefined,
+  COOKIE_SECURE:
+    process.env.COOKIE_SECURE !== undefined
+      ? process.env.COOKIE_SECURE === 'true'
+      : undefined,
 };
 
 // Validate required environment variables
